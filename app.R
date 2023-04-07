@@ -18,8 +18,6 @@ library(readr)
 library(tidyverse)
 library(rgdal)
 library(sp)
-library(leaflet)
-library(leaflet.extras)
 library(ggplot2)
 library(dplyr)
 library(tidyr)
@@ -28,17 +26,19 @@ library(readr)
 library(plotly)
 library(shinycustomloader)
 library(readxl)
+library(haven)
 
 
 #----Loading relevant data sets--------------------------------------------------------------------------------
 
 load("death_2020.Rdata")
 load("NHMD2021.Rdata")
-Weekly_use_data <- read_excel("Weekly_use_data.xlsx")
-X6monthuse <- read_excel("6monthuse.xlsx")
+IDRS <- readRDS("IDRS.rds")
+EDRS <- readRDS("EDRS.rds")
 drugtypes.data <- readRDS("drugtypes.data.rds")
 diagnosistable.data <- readRDS("diagnosistable.data.rds")
 intenttable.data <- readRDS("intenttable.data.rds")
+TreatmentGrandViz <- read_dta("TreatmentGrandViz.dta")
 Weekly2 <- readRDS("Weekly2.rds")
 nams = names(NHMD)
 
@@ -50,13 +50,10 @@ drug_use <- fluidRow(valueBoxOutput("useheader", width = 12),
                      infoBoxOutput("sixmonthedrs", width = 3),
                      infoBoxOutput("weeklyidrs", width = 3),
                      infoBoxOutput("weeklyedrs", width = 3),
-                     box(title= "Summary Information", solidHeader = TRUE, collapsible = TRUE, width = 12,
-                         HTML("<p>This page presents self-reported rates of drug use among IDRS and EDRS participants from each Australian capital city. The IDRS dataset recruits’ participants who have injected an illicit substance in the past six months and contains Heroin data. EDRS is a sentinel sample of people who regularly use ecstasy or other stimulants. Therefore, the two surveys are comprised of specific demographics who do not represent all people who use drugs.<p>
-                         
-                         <p>Within the IDRS in 2022, drug of choice remained stable compared to 2021 (p=0.568), with nearly half of participants nominating methamphetamine (46%; 45% in 2021) as their drug of choice followed by two-fifths nominating heroin (39%; 40% in 2021). The drug injected most often in the past month also remained stable in 2022 relative to 2021 (p=0.498), with methamphetamine reported as the drug injected most often by 54% of the sample (53% in 2021). Weekly or more frequent consumption of heroin among the total sample remained stable in 2022 compared to 2021 (40% versus 37%; p=0.205), as did weekly or more frequent consumption of crystal methamphetamine (58% versus 57%; p=0.631). There was a significant increase in weekly or more frequent consumption of cannabis in 2022 compared to 2021 (60% versus 54%; p=0.013).<p>
-                         
-                         <p>Within the EDRS, recent use of any ecstasy significantly decreased in 2022 (88%; 95% in 2021; p<0.001), reaching the lowest percentage since monitoring began. Recent use of cocaine remained stable in 2022 (79%; 80% in 2021), however weekly or more frequent use increased (11%; 7% in 2021; p=0.009). Whilst recent methamphetamine use has been declining over time, a significant increase was observed in 2022 (31%) relative to 2021 (26%; p=0.030). This was mostly driven by an increase in recent powder use (16%; 12% in 2021; p=0.024), although crystal remained the most commonly used form of methamphetamine (18%).<p>")
-                     ),
+                     box(title= "Summary Information", "This page contains data on drug use in Australia from various sources, including the Ecstasy and Related Drugs Reporting System (EDRS) and",
+                         "Illicit Drug Reporting System (IDRS). Please note that these findings may not be representative of all people in Australia, nor of all people who use drugs. There can be",
+                         "differences between data sources in how they capture each drug type. See the methods tab for further information and link to the source data.",
+                         solidHeader = TRUE, collapsible = TRUE, width = 12),
                      tabBox(title = paste0("Six Month Use"),
                             tabPanel("Plot", withLoader(plotlyOutput("SixMonthUse", width = "100%"), type="image", loader="DT_NIDIP_tween.gif")),
                             tabPanel("Methods")),
@@ -70,19 +67,23 @@ drug_use <- fluidRow(valueBoxOutput("useheader", width = 12),
 drug_harms <- fluidRow(valueBoxOutput("harmsheader", width = 12), 
                        infoBoxOutput("death_rate"),
                        infoBoxOutput("hosp_rate"),
-                       infoBoxOutput("poisonings"),
+                       infoBoxOutput("treat"),
                        box(title= "Summary Information", solidHeader = TRUE, collapsible = TRUE, width = 12,
                            "This space will include key summary statistics for the drug that has been selected. 
                            It will also provide a written description of the individual plots depicted on the page."),
                        tabBox(title = "Drug Related Hospitalisations",
                           tabPanel("Plot", withLoader(plotlyOutput("ByDrugPlot", width="100%"), type="image", loader="DT_NIDIP_tween.gif")),
-                          tabPanel("ICD-AM", tableOutput('drugtypetable'), 
-                                   tableOutput('diagnosistable'),
-                                   tableOutput('intenttable'))),
+                          tabPanel("Notes", includeHTML("notesByDrug.html"), 'For more detailed notes for this dataset please visit: "https://ndarc.med.unsw.edu.au/resource-analytics/trends-drug-related-hospitalisations-australia-1999-2021"'
+                                    ),
+                          tabPanel("ICD-10-AM", tableOutput('drugtypetable'))),
                        tabBox(title = "Drug Induced Deaths",
                           tabPanel("Plot", withLoader(plotlyOutput("JurPlot", width="100%"), type="image", loader="DT_NIDIP_tween.gif")),
-                          tabPanel("ICD-AM", includeHTML("notesDT.html"))),
-                       valueBox("Additional content coming soon", "Two additional plots may be placed here", width = 12, color = "red"))
+                          tabPanel("Notes", includeHTML("fnoteDTJ.html"), 'For more detailed notes for this dataset please visit: "https://ndarc.med.unsw.edu.au/resource-analytics/trends-drug-induced-deaths-australia-1997-2020"'
+                                   ),
+                          tabPanel("ICD-10", includeHTML("notesDT.html"))),
+                       tabBox(title = "Treatment Recipients", 
+                              tabPanel("Plot", withLoader(plotlyOutput("treatment", width = "100%"), type ="image", loader="DT_NIDIP_tween.gif")),
+                              tabPanel("Notes", "Notes")))
 
 drug_markets <- fluidRow(
                          infoBox("Hospitalisation rate", "254", "per 100,000 people", color = "red"),
@@ -105,26 +106,27 @@ ui <- dashboardPage(skin = "purple",
                       sidebarMenu(
                         # Setting id makes input$tabs give the tabName of currently-selected tab
                         id = "tabs",
+                        width = 220,
+                        style = "position:fixed;width:220px;",
                         menuItem("Drug Use", tabName = "tdrug", icon = icon("pills"), # Menu for the Drug Use Tab
                               menuSubItem("Drug Use Dashboard", tabName = "drguse"),
                               menuItem(
                                 selectInput("udrug", "Drug:",
                                             c("Methamphetamine", # This list may be expanded in future, however these four are the most important.
                                               "Heroin",
-                                              "Ecstasy",
                                               "Cannabis",
                                               "Cocaine"))),
                               menuItem(
                                 selectInput("city", "Jurisdiction:",
                                             c("Australia",
-                                              "Adelaide",
-                                              "Brisbane",
-                                              "Canberra",
-                                              "Darwin",
-                                              "Hobart",
-                                              "Melbourne",
-                                              "Perth",
-                                              "Sydney"))),
+                                              "Adelaide"="SA",
+                                              "Brisbane"="QLD",
+                                              "Canberra"="ACT",
+                                              "Darwin"="NT",
+                                              "Hobart"="TAS",
+                                              "Melbourne"="VIC",
+                                              "Perth"="WA",
+                                              "Sydney"="NSW"))),
                                 menuItem(
                                   sliderInput("yr00", "Year",
                                               min=2000, max=2022, # EDRS data starts in 2003
@@ -164,13 +166,12 @@ ui <- dashboardPage(skin = "purple",
                                  menuItem(
                                    selectInput(
                                      "plotByDT", "Plot:",
-                                     c(
+                                     c("Crude rate" = "cr",
+                                       "Crude rate (95% CI)" = "crci",
                                        "Age-standardised rate" = "sr",
-                                       "Age-standardised rate (95% CI)" = "srci",
-                                       "Crude rate" = "cr",
-                                       "Crude rate (95% CI)" = "crci"
+                                       "Age-standardised rate (95% CI)" = "srci"
                                      ),
-                                     selected = "sr"
+                                     selected = "cr"
                                    )),
                                  
                                   menuItem(
@@ -226,35 +227,152 @@ server <- function(input, output) {
     input$hdrug
   })
   
+#---Drug Use Tab------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+  output$useheader <- renderValueBox({
+    valueBox(paste(input$udrug), color = "purple", paste0(input$city))
+  })
+  
+# Infographics
+  
+  output$sixmonthidrs <- renderInfoBox({
+    sub <- IDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug) %>% arrange(var_year)
+    infoBox("Any use past 6-months",
+            paste0(tail(sub$any, n=1),"% in ", input$yr00[2]),
+            "of people who regularly inject drugs (IDRS)",
+            icon = icon("calendar-check"),
+            color = "blue")
+  })
+  
+  output$sixmonthedrs <- renderInfoBox({
+    sub <- EDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug) %>% arrange(var_year)
+    infoBox("Any use past 6-months",
+            paste0(tail(sub$any, n=1),"% in ", input$yr00[2]),
+            "of people who regularly use ecstasy/other illicit stimulants (EDRS)",
+            icon = icon("calendar-check"),
+            color = "orange")
+  })
+  
+  output$weeklyidrs <- renderInfoBox({
+    sub <- IDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug) %>% arrange(var_year)
+    infoBox("Weekly+ use past 6 months",
+            paste0(tail(sub$weekly, n=1),"% in ", input$yr00[2]),
+            "of people who regularly inject drugs (IDRS)",
+            icon = icon("calendar-week"),
+            color = "blue")
+  })
+  
+  output$weeklyedrs <- renderInfoBox({
+    sub <- EDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug) %>% arrange(var_year)
+    infoBox("Weekly+ use past 6 months",
+            paste0(tail(sub$weekly, n=1),"% in ", input$yr00[2]),
+            "of people who regularly use ecstasy/other illicit stimulants (EDRS)",
+            icon = icon("calendar-week"),
+            color = "orange")
+  })
+  
+
+  
+#---Weekly drug use plot------------------------------------------------------------------------------------------------------
+  
+ output$WeeklyUsePlot <- renderPlotly({
+   IDRS <- IDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug)
+   EDRS <- EDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug)
+   COLOURS <- c("IDRS" = "blue", "EDRS" = "orange")
+   
+   p <- ggplot() +
+     geom_line(data = IDRS, aes(x = var_year, y = weekly, colour = "IDRS")) +
+     geom_point(data = IDRS, aes(x = var_year, y = weekly, colour = "IDRS", text = paste0(
+       "Year: ", var_year,
+       "<br>Use: ",weekly,"%",
+       "<br>Drug: ", Drug,
+       "<br>State: ", istate
+     )), size = 0.8, shape = 21) +
+     geom_line(data = EDRS, aes(x = var_year, y = weekly, colour = "EDRS")) +
+     geom_point(data = EDRS, aes(x = var_year, y = weekly, colour = "EDRS", text = paste0(
+       "Year: ", var_year,
+       "<br>Use: ",weekly,"%",
+       "<br>Drug: ", Drug,
+       "<br>State: ", istate
+     )), size = 0.8, shape = 21) +
+     scale_color_manual(values = COLOURS, name = "Data source") +
+     labs(x = "Year",  y = "% Samples who regularly use drugs", colour = "Data source") +
+     scale_x_continuous(breaks = c(2000, 2003, 2006, 2009, 2012, 2015, 2018, 2021),
+                        labels=c("2000", '2003', '2006', '2009', '2012', '2015', '2018', '2021')) +
+     scale_y_continuous(limits = c(0,100), breaks = seq(0, 100, 10)) +
+     theme(axis.text.x = element_text(angle = 35, hjust = 1), panel.grid.major.x = element_blank(),
+           panel.grid.major.y = element_line(color = "gray90", linewidth = 0.2),
+           panel.grid.minor.y = element_line(color = "gray90", linewidth = 0.2),
+           panel.background = element_blank())
+   
+   ggplotly(p, tooltip = "text")
+ })
+  
+#---Six Month Drug Use---------------------------------------------------------------------------------------------------------
+  
+  output$SixMonthUse <- renderPlotly({
+    IDRS <- IDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug)
+    EDRS <- EDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug)
+    COLOURS <- c("IDRS" = "blue", "EDRS" = "orange")
+    
+    p <- ggplot() +
+      geom_line(data = IDRS, aes(x = var_year, y = any, colour = "IDRS")) +
+      geom_point(data = IDRS, aes(x = var_year, y = any, colour = "IDRS", text = paste0(
+        "Year: ", var_year,
+        "<br>Use: ",any,"%",
+        "<br>Drug: ", Drug,
+        "<br>State: ", istate
+      )), size = 0.8, shape = 21) +
+      geom_line(data = EDRS, aes(x = var_year, y = any, colour = "EDRS")) +
+      geom_point(data = EDRS, aes(x = var_year, y = any, colour = "EDRS", text = paste0(
+        "Year: ", var_year,
+        "<br>Use: ",any,"%",
+        "<br>Drug: ", Drug,
+        "<br>State: ", istate
+      )), size = 0.8, shape = 21) +
+      scale_color_manual(values = COLOURS, name = "Data source") +
+      labs(x = "Year",  y = "% Samples who regularly use drugs") +
+      scale_x_continuous(breaks = c(2000, 2003, 2006, 2009, 2012, 2015, 2018, 2021),
+                         labels=c("2000", '2003', '2006', '2009', '2012', '2015', '2018', '2021')) +
+      scale_y_continuous(limits = c(0,100), breaks = seq(0, 100, 10)) +
+      theme(axis.text.x = element_text(angle = 35, hjust = 1), panel.grid.major.x = element_blank(),
+            panel.grid.major.y = element_line(color = "gray90", linewidth = 0.2),
+            panel.grid.minor.y = element_line(color = "gray90", linewidth = 0.2),
+            panel.background = element_blank())
+    
+    ggplotly(p, tooltip = "text")
+  })
+  
+
+#---Drug Harms Tab----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+  hospitalReactive <- reactive({
+    
+    sub <-  NHMD %>% subset(Reason=="Any" & Intent=="Any" & Age == "All ages" & jurisdiction == selectedState() & Drug == input$hdrug &
+                              (year >= selectedYear()[[1]] & year <= selectedYear()[[2]])) %>% unite(AgeSex, c(Age, Sex), sep = ", ", remove = FALSE)
+  })
+  
   alldrugreactive <- reactive({
     COD2020_All$Drug <- "All drugs"
-    alldrg <- COD2020_All %>%  subset(jurisdiction== selectedState() &
-                                    Age %in% "All ages" & Intent %in% "All" & Drug == selectedDrug() &
-                                    (Year>= selectedYear()[1] & Year<=selectedYear()[2]) & Release=="Current") %>% unite(AgeSex, c(Age, Sex), sep = ", ", remove = FALSE)
+    COD2020_All$jurisdiction[COD2020_All$jurisdiction == "Tasmania"] <- "Tasmania*"
+    alldrg <- COD2020_All %>% subset(jurisdiction== selectedState() &
+                                       Age %in% "All ages" & Intent %in% "All" & Drug == selectedDrug() &
+                                       (Year>= selectedYear()[1] & Year<=selectedYear()[2]) & Release=="Current") 
   })
-  
-  hospitalReactive <- reactive({
-
-    sub <-  NHMD %>% subset(Reason=="Any" & Intent=="Any" & Age == "All ages" & jurisdiction == selectedState() & Drug == input$hdrug &
-                                     (year >= selectedYear()[[1]] & year <= selectedYear()[[2]])) %>% unite(AgeSex, c(Age, Sex), sep = ", ", remove = FALSE)
-  })
-  
   
   deathsReactive <- reactive({
-    COD2020_DT$jurisdiction[COD2020_All$jurisdiction == "Tasmania"] <- "Tasmania*"
+    COD2020_DT$jurisdiction[COD2020_DT$jurisdiction == "Tasmania"] <- "Tasmania*"
+    COD2020_DT$cr[COD2020_DT$cr == 0] <- NA
+    
     COD2020_DT$Drug <- ifelse(COD2020_DT$Drug == "AMPHETAMINES", "Amphetamine-type stimulants",
                               ifelse(COD2020_DT$Drug == "COCAINE", "Cocaine",
                                      ifelse(COD2020_DT$Drug == "CANNABINOIDS", "Cannabinoids",
                                             ifelse(COD2020_DT$Drug == "heroin", "Heroin", COD2020_DT$Drug))))
     
-
-    pd <- COD2020_DT %>%  subset(jurisdiction== selectedState() &
-                    Age %in% "All ages" & Intent %in% "All" & Drug == selectedDrug() &
-                    (Year>= selectedYear()[1] & Year<=selectedYear()[2]) & Release=="Current") %>% unite(AgeSex, c(Age, Sex), sep = ", ", remove = FALSE)
-
+    pd <- COD2020_DT %>% subset(jurisdiction== selectedState() &
+                                   Age %in% "All ages" & Intent %in% "All" & Drug == selectedDrug() &
+                                   (Year>= selectedYear()[1] & Year<=selectedYear()[2]) & Release=="Current")
   })
-  
-  # These if statements are necessary because the input 'All Drugs' for drug deaths is in a separate dataset to the other options
   
   jurdata <- reactive({
     if (selectedDrug() == "Heroin") {
@@ -270,89 +388,22 @@ server <- function(input, output) {
     }
   })
   
-#---Drug Use Tab------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-  output$useheader <- renderValueBox({
-    valueBox(paste(input$udrug), color = "purple", paste0(input$city))
-  })
-  
-# Infographics
-  
-  output$sixmonthidrs <- renderInfoBox({
-    sub <- X6monthuse %>% subset((Year>=input$yr00[1] & Year<=input$yr00[2]) & Jurisdiction == input$city & Source == "IDRS")
-    infoBox("Latest 6-month Use",
-            paste0(tail(sub[[input$udrug]], n=1),"%"),
-            "of IDRS respondents",
-            icon = icon("calendar-check"),
-            color = "blue")
-  })
-  
-  output$sixmonthedrs <- renderInfoBox({
-    sub <- X6monthuse %>% subset((Year>=input$yr00[1] & Year<=input$yr00[2]) & Jurisdiction == input$city & Source == "EDRS")
-    infoBox("Latest 6-month Use",
-            paste0(tail(sub[[input$udrug]], n=1),"%"),
-            "of EDRS respondents",
-            icon = icon("calendar-check"),
-            color = "orange")
-  })
-  
-  output$weeklyidrs <- renderInfoBox({
-    sub <- Weekly_use_data %>% subset((Year>=input$yr00[1] & Year<=input$yr00[2]) & Source == "IDRS")
-    infoBox("Latest Weekly Use",
-            paste0(tail(sub[[input$udrug]], n=1),"%"),
-            "of IDRS respondents",
-            icon = icon("calendar-week"),
-            color = "blue")
-  })
-  
-  output$weeklyedrs <- renderInfoBox({
-    sub <- Weekly_use_data %>% subset((Year>=input$yr00[1] & Year<=input$yr00[2]) & Source == "EDRS")
-    infoBox("Latest Weekly Use",
-            paste0(tail(sub[[input$udrug]], n=1),"%"),
-            "of EDRS respondents",
-            icon = icon("calendar-week"),
-            color = "orange")
-  })
-  
-
-  
-#---Weekly drug use plot
- output$WeeklyUsePlot <- renderPlotly({
-   sub <- Weekly_use_data %>% subset((Year>=input$yr00[1] & Year<=input$yr00[2]))
-   
-   p <- ggplot() +
-     geom_line(data = sub, aes(x = Year, y = !!sym(input$udrug), colour = Source)) +
-     geom_point(data = sub, aes(x = Year, y = !!sym(input$udrug), colour = Source), size = 0.8, shape = 21) +
-     scale_color_manual(values = c("IDRS" = "blue", "EDRS" = "orange")) +
-     labs(x = "Year",  y = "% IDRS/EDRS Participants", color = "Data source") +
-     scale_x_continuous(breaks = Weekly_use_data$Year) +
-     scale_y_continuous(limits = c(0,100), breaks = seq(0, 100, 10)) +
-     theme(axis.text.x = element_text(angle = 35, hjust = 1), panel.grid.major.x = element_blank(),
-           panel.grid.major.y = element_line(color = "gray90", linewidth = 0.2),
-           panel.grid.minor.y = element_line(color = "gray90", linewidth = 0.2),
-           panel.background = element_blank())
- })
-  
-  output$SixMonthUse <- renderPlotly({
-    sub <- X6monthuse %>% subset((Year>=input$yr00[1] & Year<=input$yr00[2]) & Jurisdiction == input$city)
+  treatmentReactive <- reactive({ 
+    TreatmentGrandViz$Location <- ifelse(TreatmentGrandViz$Location == "AUS", "Australia",
+                                         ifelse(TreatmentGrandViz$Location == "ACT", "Australian Capital Territory",
+                                                ifelse(TreatmentGrandViz$Location == "NSW", "New South Wales",
+                                                       ifelse(TreatmentGrandViz$Location == "NT", "Northern Territory",
+                                                              ifelse(TreatmentGrandViz$Location == "WA", "Western Australia",
+                                                                     ifelse(TreatmentGrandViz$Location == "VIC", "Victoria",
+                                                                            ifelse(TreatmentGrandViz$Location == "QLD", "Queensland", 
+                                                                                   ifelse(TreatmentGrandViz$Location == "SA", "South Australia", 
+                                                                                          ifelse(TreatmentGrandViz$Location == "TAS", "Tasmania*", TreatmentGrandViz$Location)))))))))
+    TreatmentGrandViz$Drug <- ifelse(TreatmentGrandViz$Drug == "All", "All drugs",
+                                     ifelse(TreatmentGrandViz$Drug == "Amphetamine-type stimulant", "Amphetamine-type stimulants", TreatmentGrandViz$Drug))
     
-    p <- ggplot() +
-      geom_line(data = sub, aes(x = Year, y = !!sym(input$udrug), colour = Source)) +
-      geom_point(data = sub, aes(x = Year, y = !!sym(input$udrug), colour = Source, text = paste0("% Use: ",!!sym(input$udrug), "%")), size = 0.8, shape = 21) +
-      scale_color_manual(values = c("IDRS" = "blue", "EDRS" = "orange")) +
-      labs(x = "Year",  y = "% IDRS/EDRS Participants", color = "Data source") +
-      scale_x_continuous(breaks = Weekly_use_data$Year) +
-      scale_y_continuous(limits = c(0,100), breaks = seq(0, 100, 10)) +
-      theme(axis.text.x = element_text(angle = 35, hjust = 1), panel.grid.major.x = element_blank(),
-            panel.grid.major.y = element_line(color = "gray90", linewidth = 0.2),
-            panel.grid.minor.y = element_line(color = "gray90", linewidth = 0.2),
-            panel.background = element_blank())
-    
+    sub <- TreatmentGrandViz %>% subset((Year_end>=input$yr97[1] & Year_end<=input$yr97[2]) & Location == input$jur & Drug == input$hdrug)
   })
   
-
-#---Drug Harms Tab----------------------------------------------------------------------------------------------------------------------------------------------------------------
-
 # Creating the output sections for each interactive element in the app
   
 # INFOGRAPHIC 1
@@ -363,7 +414,7 @@ server <- function(input, output) {
                     (Year>=yr[[1]] & Year<=yr[[2]]) & Release=="Current" & Drug == selectedDrug())
     infoBox(
       "Most recent Death rate:",
-      round(tail(deaths_box$sr, n=1), digits = 1),
+      round(tail(deaths_box$cr, n=1), digits = 1),
       "per 100,000 people",
       icon = icon("line-chart"),
       color = "purple"
@@ -372,12 +423,12 @@ server <- function(input, output) {
 
 # INFOGRAPHIC 2
   output$hosp_rate <- renderInfoBox({
-    hosp_box <- NHMD %>% subset(Reason=="Any" & Intent=="Any" & Age == "All ages" & jurisdiction == selectedState() & Drug == selectedDrug() &
+    hosp_box <- NHMD %>% arrange(year) %>% subset(Reason=="Any" & Intent=="Any" & Age == "All ages" & jurisdiction == selectedState() & Drug == selectedDrug() &
                                   (year >= selectedYear()[[1]] & year <= selectedYear()[[2]])) %>% unite(AgeSex, c(Age, Sex), sep = ", ", remove = FALSE)
     
     infoBox(
       "Most recent Hospitalisation rate:",
-      round(tail(hosp_box$sr, n=1), digits = 1),
+      round(tail(hosp_box$cr, n=1), digits = 1),
       "per 100,000 people",
       icon = icon("stethoscope"),
       color = "blue"
@@ -385,15 +436,13 @@ server <- function(input, output) {
   })
   
 # INFOGRAPHIC 3
-  output$poisonings <- renderInfoBox({
-    pois_box <- NHMD %>% subset(Reason=="Poisoning" & Intent=="Intentional" & Age == "All ages" & jurisdiction == selectedState() & Drug == selectedDrug() &
-                         (year >= selectedYear()[[1]] & year <= selectedYear()[[2]]))
-    
+  output$treat <- renderInfoBox({
+   
     infoBox(
-      "Most recent Intentional Poisonings:",
-      round(tail(pois_box$sr, n=1), digits = 1),
+      "Most recent Treatment rate:",
+      round(tail(treatmentReactive()$cr, n=1), digits = 1),
       "per 100,000 people",
-      icon = icon("biohazard"),
+      icon = icon("user-nurse"),
       color = "purple"
     )
     
@@ -412,26 +461,23 @@ server <- function(input, output) {
   
    output$ByDrugPlot <- renderPlotly({
 
-     p <- ggplot(hospitalReactive()) + aes(x = year, colour = AgeSex, linetype = AgeSex, group = 1) +
+     p <- ggplot(hospitalReactive()) + aes(x = year, colour = Sex, group = 1) +
        geom_line() + geom_point(size=0.55) +
-       labs(x = "Financial Year", colour = "", linetype="") +
-       theme(axis.text.x = element_text(angle = 30, hjust = 1), panel.grid.major.x = element_blank(),
+       labs(x = "Financial Year", colour = "", linetype = "") +
+       theme(panel.grid.major.x = element_blank(),
              panel.grid.major.y = element_line(color = "gray90", linewidth = 0.2),
              panel.grid.minor.y = element_line(color = "gray90", linewidth = 0.2),
              panel.background = element_blank()) +
-       scale_linetype_manual(values = AgeSextype) +
        #theme(legend.title = element_blank()) +
-       scale_x_continuous(breaks = c(2000, 2003, 2006, 2009, 2012, 2015, 2018, 2021),
-                          labels=c("2000", '2003', '2006', '2009', '2012', '2015', '2018', '2021'))
+       scale_x_continuous(breaks = c(2000, 2005, 2010, 2015, 2020),
+                          labels=c("2000", '2005', '2010', '2015', '2020'))
      
     if (input$plotByDT == "cr" | input$plotByDT == "crci") {
        p <- p + aes(y = cr,
                     text = paste0(
-                      "Financial Year: ", data_year,
+                      "Year: ", year,
                       "<br>Location: ", jurisdiction,
                       "<br>Drug: ", Drug,
-                      "<br>Age group: ", Age,
-                      "<br>Sex: ", Sex,
                       "<br>Hospitalisations: ", n,
                       "<br>Crude Rate: ", cr_p
                     )
@@ -446,11 +492,9 @@ server <- function(input, output) {
      else if (input$plotByDT == "sr" | input$plotByDT == "srci"  ) {
        p <- p + aes(y = sr,
                     text = paste0(
-                      "Financial Year: ", data_year,
+                      "Year: ", year,
                       "<br>Location: ", jurisdiction,
                       "<br>Drug: ", Drug,
-                      "<br>Age group: ", Age,
-                      "<br>Sex: ", Sex,
                       "<br>Hospitalisations:", n,
                       "<br>Standardised Rate: ", sr_p
                     )
@@ -470,7 +514,7 @@ server <- function(input, output) {
      
      ggplotly(p, tooltip = "text") %>%
        add_annotations(
-         text = 'Source: <a href="https://ndarc.med.unsw.edu.au/resource-analytics/trends-drug-related-hospitalisations-australia-1999-2019">DrugTrends</a>, NDARC',
+         text = 'Source: <a href="https://ndarc.med.unsw.edu.au/resource-analytics/trends-drug-related-hospitalisations-australia-1999-2021">DrugTrends</a>, NDARC',
          xref = "paper", yref = "paper",
          x = 0, xanchor = "left",
          y = 1.04, yanchor = "top",
@@ -492,17 +536,23 @@ server <- function(input, output) {
   
   output$intenttable <- renderTable(intenttable.data)
   
-  #---------------Drug deaths plot by drug, jurisdiction, intent and sex ----------------------------------
+#---------------Drug deaths plot by drug, jurisdiction, intent and sex ----------------------------------
 
-  # These if statements are necessary because the input 'All Drugs' is in a separate dataset to the other options
+  # These if statements are necessary because the input 'All Drugs' for drug deaths is in a separate dataset to the other options
   
 jurdata2 <- reactive({jurdata})
 
   output$JurPlot <- renderPlotly({
     # Plot settings that are the same for all possible inputs
     
-    gp <- ggplot(jurdata(), aes(x = Year, colour = AgeSex, linetype = AgeSex, group = 1)) + geom_point(size=0.55) +
-    labs(x = "Year", colour = "", linetype="") + theme_light() + scale_linetype_manual(values = AgeSextype)
+    gp <- ggplot(jurdata(), aes(x = Year, colour = Sex, group = 1, text = paste0(
+      "Year: ", Year,
+      "<br>Location: ", jurisdiction,
+      "<br>Drug: ", Drug,
+      "<br>Deaths: ", n,
+      "<br>Crude Rate: ", cr_p
+    ))) + geom_point(size=0.55) +
+    labs(x = "Year", colour = "", linetype = "") + theme_light()
     # Crude rate per 100,000
     if (input$plotByDT == "cr" | input$plotByDT == "crci") {
       gp <- gp + geom_line() + 
@@ -523,11 +573,12 @@ jurdata2 <- reactive({jurdata})
       }
     }
     # Missing or low data
-    validate(need(nrow(jurdata()) > 0, "No data selected or data unavailable"))
-    
+
     gp <- gp + theme(panel.grid.minor.x = element_blank(), panel.grid.major.x = element_blank())
     
-    # Adding the NIDIP logo, a link to the most recent paper and the source
+    validate(need(nrow(jurdata()) > 0, "No data selected or data unavailable"))
+    
+    # Adding a link to the most recent paper and the source
     ggplotly(gp, tooltip="text") %>%
       
       add_annotations(
@@ -539,36 +590,71 @@ jurdata2 <- reactive({jurdata})
       )
   })
   
+  #---Treatment Visualization---------------------------------------------------------------------------
+  
+  output$treatment <- renderPlotly({
+
+    gp <- ggplot(treatmentReactive()) + aes(x = Year_end, y = cr, colour = Sex, linetype = Sex, group = 1, 
+                          text = paste0(
+                            "Year ", Year_end,
+                            "<br>Crude rate: ", round(cr, digits = 3),
+                            "<br>Location: ", Location,
+                            "<br>Drug: ", Drug
+                          )) + 
+      geom_point(size=0.55) +
+      labs(x = "Year", colour = "", linetype="") + 
+      theme(panel.grid.major.x = element_blank(),
+            panel.grid.major.y = element_line(color = "gray90", linewidth = 0.2),
+            panel.grid.minor.y = element_line(color = "gray90", linewidth = 0.2),
+            panel.background = element_blank())
+    # Crude rate per 100,000
+    if (input$plotByDT == "cr"){
+      gp <- gp + geom_line() + 
+        scale_y_continuous(limits = c(0, max(treatmentReactive()$cr_uci, 2.5))) +
+        labs(x = "Year", y = "Crude Rate per 100,000")
+    }
+    else if (input$plotByDT == "crci"){
+      gp <- gp + geom_line() + geom_ribbon(aes(ymin = cr_lci, ymax = cr_uci), alpha = 0.1, size = 0) + 
+        scale_y_continuous(limits = c(0, max(treatmentReactive()$cr_uci, 2.5))) +
+        labs(x = "Year", y = "Crude Rate per 100,000")
+    }
+    ggplotly(gp, tooltip="text")
+
+  })
+  
+
+#---Download button----------------------------------------------------------------------------------------
+  
 #observeEvent(input$downp1, { screenshot(id= "WeeklyUsePlot")})
 
-  output$downp1 <- downloadHandler(
-    filename = "plots_and_report.zip",
-    content = function(file){
-      # create a Zip file to store the PNG files and R Markdown report
-      zip(file, extras = "-j")
-      
-      # loop through each plot and save as a PNG in the Zip file
-      for (i in 1:1) {
-        # generate the plot using code specific to your app
-        plot <- output$WeeklyUsePlot
-        
-        # save the plot as a PNG in the Zip file
-        png(paste0("plot", i, ".png"))
-        print(plot)
-        dev.off()
-        
-        # add the PNG file to the Zip file
-        writeZip(paste0("plot", i, ".png"), file)
-      }
-      
-      # render the R Markdown document and add it to the Zip file
-      rmarkdown::render("Downloadable_report.Rmd", output_format = "html_document", output_file = "Downloadable_report.html")
-      writeZip("Downloadable_report.html", file)
-      
-      # close the Zip file
-      closeZip(file)
-    }
-  )
+  # output$downp1 <- downloadHandler(
+  #   filename = "plots_and_report.zip",
+  #   content = function(file){
+  #     # create a Zip file to store the PNG files and R Markdown report
+  #     zip(file, extras = "-j")
+  #     
+  #     # loop through each plot and save as a PNG in the Zip file
+  #     for (i in 1:1) {
+  #       # generate the plot using code specific to your app
+  #       plot <- output$WeeklyUsePlot
+  #       
+  #       # save the plot as a PNG in the Zip file
+  #       png(paste0("plot", i, ".png"))
+  #       print(plot)
+  #       dev.off()
+  #       
+  #       # add the PNG file to the Zip file
+  #       writeZip(paste0("plot", i, ".png"), file)
+  #     }
+  #     
+  #     # render the R Markdown document and add it to the Zip file
+  #     rmarkdown::render("Downloadable_report.Rmd", output_format = "html_document", output_file = "Downloadable_report.html")
+  #     writeZip("Downloadable_report.html", file)
+  #     
+  #     # close the Zip file
+  #     closeZip(file)
+  #   }
+  # )
   #------------ Cryptomarket visualization ------------------------------------------------------------------------
   
   output$meth_plot <- renderPlotly({
