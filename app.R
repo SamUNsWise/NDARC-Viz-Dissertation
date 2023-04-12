@@ -7,13 +7,12 @@
 #    http://shiny.rstudio.com/
 #
 # Author: Samuel Jones
-# Purpose: 
+# Purpose: Provide an interactive visualization platform for Drug Trends
 
 #----Installing packages---------------------------------------------------------
 
 library(shiny)
 library(shinydashboard)
-library(shinyscreenshot)
 library(readr)
 library(tidyverse)
 library(rgdal)
@@ -22,7 +21,6 @@ library(ggplot2)
 library(dplyr)
 library(tidyr)
 library(janitor)
-library(readr)
 library(plotly)
 library(shinycustomloader)
 library(readxl)
@@ -60,8 +58,7 @@ drug_use <- fluidRow(valueBoxOutput("useheader", width = 12),
                      tabBox(title = "Weekly Use",
                             tabPanel("Plot", withLoader(plotlyOutput("WeeklyUsePlot", width = "100%"), type="image", loader="DT_NIDIP_tween.gif")),
                             tabPanel("Methods")
-                            ),
-                     box(title = "Click here to create report:", width = 2, weight = 200, downloadButton("downp1", "Download Plot:"))
+                            )
                      )
 
 drug_harms <- fluidRow(valueBoxOutput("harmsheader", width = 12), 
@@ -131,8 +128,11 @@ ui <- dashboardPage(skin = "purple",
                                   sliderInput("yr00", "Year",
                                               min=2000, max=2022, # EDRS data starts in 2003
                                               value = c(2000, 2022), sep="")),
-                              menuSubItem("Drug Use Report", tabName = "report")
-                                 ),
+                              menuItem(
+                                radioButtons('format', 'Document format', c('PDF', 'HTML', 'Word'),
+                                           inline = TRUE)),
+                              menuItem(
+                                downloadButton("report", "Download Report:"))),
                                   
 #----Drug Harms sidebar menu-------------------------------------------------------------------------------
                         menuItem("Drug Harms", tabName = "hdrug", icon = icon("hospital"),
@@ -274,22 +274,26 @@ server <- function(input, output) {
 
   
 #---Weekly drug use plot------------------------------------------------------------------------------------------------------
+  IDRSreactive <- reactive({
+  IDRS <- IDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug)
+  })
+  EDRSreactive <- reactive({
+  EDRS <- EDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug)
+  })
   
  output$WeeklyUsePlot <- renderPlotly({
-   IDRS <- IDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug)
-   EDRS <- EDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug)
    COLOURS <- c("IDRS" = "blue", "EDRS" = "orange")
    
    p <- ggplot() +
-     geom_line(data = IDRS, aes(x = var_year, y = weekly, colour = "IDRS")) +
-     geom_point(data = IDRS, aes(x = var_year, y = weekly, colour = "IDRS", text = paste0(
+     geom_line(data = IDRSreactive(), aes(x = var_year, y = weekly, colour = "IDRS")) +
+     geom_point(data = IDRSreactive(), aes(x = var_year, y = weekly, colour = "IDRS", text = paste0(
        "Year: ", var_year,
        "<br>Use: ",weekly,"%",
        "<br>Drug: ", Drug,
        "<br>State: ", istate
      )), size = 0.8, shape = 21) +
-     geom_line(data = EDRS, aes(x = var_year, y = weekly, colour = "EDRS")) +
-     geom_point(data = EDRS, aes(x = var_year, y = weekly, colour = "EDRS", text = paste0(
+     geom_line(data = EDRSreactive(), aes(x = var_year, y = weekly, colour = "EDRS")) +
+     geom_point(data = EDRSreactive(), aes(x = var_year, y = weekly, colour = "EDRS", text = paste0(
        "Year: ", var_year,
        "<br>Use: ",weekly,"%",
        "<br>Drug: ", Drug,
@@ -311,20 +315,18 @@ server <- function(input, output) {
 #---Six Month Drug Use---------------------------------------------------------------------------------------------------------
   
   output$SixMonthUse <- renderPlotly({
-    IDRS <- IDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug)
-    EDRS <- EDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug)
     COLOURS <- c("IDRS" = "blue", "EDRS" = "orange")
     
     p <- ggplot() +
-      geom_line(data = IDRS, aes(x = var_year, y = any, colour = "IDRS")) +
-      geom_point(data = IDRS, aes(x = var_year, y = any, colour = "IDRS", text = paste0(
+      geom_line(data = IDRSreactive(), aes(x = var_year, y = any, colour = "IDRS")) +
+      geom_point(data = IDRSreactive(), aes(x = var_year, y = any, colour = "IDRS", text = paste0(
         "Year: ", var_year,
         "<br>Use: ",any,"%",
         "<br>Drug: ", Drug,
         "<br>State: ", istate
       )), size = 0.8, shape = 21) +
-      geom_line(data = EDRS, aes(x = var_year, y = any, colour = "EDRS")) +
-      geom_point(data = EDRS, aes(x = var_year, y = any, colour = "EDRS", text = paste0(
+      geom_line(data = EDRSreactive(), aes(x = var_year, y = any, colour = "EDRS")) +
+      geom_point(data = EDRSreactive(), aes(x = var_year, y = any, colour = "EDRS", text = paste0(
         "Year: ", var_year,
         "<br>Use: ",any,"%",
         "<br>Drug: ", Drug,
@@ -624,38 +626,39 @@ jurdata2 <- reactive({jurdata})
   
 
 #---Download button----------------------------------------------------------------------------------------
-  
-#observeEvent(input$downp1, { screenshot(id= "WeeklyUsePlot")})
 
-  # output$downp1 <- downloadHandler(
-  #   filename = "plots_and_report.zip",
-  #   content = function(file){
-  #     # create a Zip file to store the PNG files and R Markdown report
-  #     zip(file, extras = "-j")
-  #     
-  #     # loop through each plot and save as a PNG in the Zip file
-  #     for (i in 1:1) {
-  #       # generate the plot using code specific to your app
-  #       plot <- output$WeeklyUsePlot
-  #       
-  #       # save the plot as a PNG in the Zip file
-  #       png(paste0("plot", i, ".png"))
-  #       print(plot)
-  #       dev.off()
-  #       
-  #       # add the PNG file to the Zip file
-  #       writeZip(paste0("plot", i, ".png"), file)
-  #     }
-  #     
-  #     # render the R Markdown document and add it to the Zip file
-  #     rmarkdown::render("Downloadable_report.Rmd", output_format = "html_document", output_file = "Downloadable_report.html")
-  #     writeZip("Downloadable_report.html", file)
-  #     
-  #     # close the Zip file
-  #     closeZip(file)
-  #   }
-  # )
-  #------------ Cryptomarket visualization ------------------------------------------------------------------------
+  output$report <- downloadHandler(
+    filename = function() {
+      paste('drug_use_report', sep = '.', switch(
+        input$format, PDF = 'pdf', HTML = 'html', Word = 'docx'
+      ))
+    },
+    
+    content = function(file) {
+      src <- normalizePath('drug_use_report.Rmd')
+      
+      # temporarily switch to the temp dir, in case you do not have write
+      # permission to the current working directory
+      owd <- setwd(tempdir())
+      on.exit(setwd(owd))
+      file.copy(src, 'drug_use_report.Rmd', overwrite = TRUE)
+      params <- list(yr00 = input$yr00,
+                     city = input$city,
+                     udrug = input$udrug,
+                     IDRS = IDRSreactive(),
+                     EDRS = EDRSreactive())
+      library(rmarkdown)
+      out <- render('drug_use_report.Rmd', switch(
+        input$format,
+        HTML = html_document(), PDF = pdf_document(), Word = word_document()),
+        params = params,
+        envir = new.env(parent = globalenv()))
+      file.rename(out, file)
+    }
+  )
+  
+
+#------------ Cryptomarket visualization ------------------------------------------------------------------------
   
   output$meth_plot <- renderPlotly({
     mplot <- ggplot(Weekly2[(Weekly2$Week > "2020-10-08"),] 
