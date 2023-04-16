@@ -32,12 +32,11 @@ library(haven)
 load("death_2020.Rdata")
 load("NHMD2021.Rdata")
 IDRS <- readRDS("IDRS.rds")
-EDRS <- readRDS("EDRS.rds")
+EDRS <- readRDS("EDRS2.rds")
 drugtypes.data <- readRDS("drugtypes.data.rds")
 diagnosistable.data <- readRDS("diagnosistable.data.rds")
 intenttable.data <- readRDS("intenttable.data.rds")
 TreatmentGrandViz <- read_dta("TreatmentGrandViz.dta")
-Weekly2 <- readRDS("Weekly2.rds")
 nams = names(NHMD)
 
 
@@ -124,10 +123,19 @@ ui <- dashboardPage(skin = "purple",
                                               "Melbourne"="VIC",
                                               "Perth"="WA",
                                               "Sydney"="NSW"))),
+                              menuItem(
+                                selectInput(
+                                  "useCI", "Confidence Intervals:",
+                                  c("Proportion" = "pr",
+                                    "Proportion (95% CI)" = "prci"
+                                  ),
+                                  selected = "pr"
+                                )),
                                 menuItem(
                                   sliderInput("yr00", "Year",
                                               min=2000, max=2022, # EDRS data starts in 2003
                                               value = c(2000, 2022), sep="")),
+                              
                               menuItem(
                                 radioButtons('format', 'Document format', c('PDF', 'HTML', 'Word'),
                                            inline = TRUE)),
@@ -137,10 +145,7 @@ ui <- dashboardPage(skin = "purple",
 #----Drug Harms sidebar menu-------------------------------------------------------------------------------
                         menuItem("Drug Harms", tabName = "hdrug", icon = icon("hospital"),
                                  menuSubItem("Drug Harms Dashboard", tabName = "drgharms"),
-                                 # menuItem(
-                                 #   selectInput("drg2", "Select Drug",
-                                 #               c(levels(factor(NHMD$Drug))), selected = c("All drugs")
-                                 #               )),
+                                
                                  menuItem(
                                    selectInput("hdrug", "Drug:", # If the datasets had different menus it would be possible to include all drugs
                                              c("All drugs",
@@ -159,10 +164,7 @@ ui <- dashboardPage(skin = "purple",
                                                    "Tasmania*",
                                                    "Victoria",
                                                    "Western Australia"))),
-                                   # menuItem(
-                                   #   sliderInput("yearsByDT", "Financial year",
-                                   #               min = 2000, max = 2021, step=1, 
-                                   #               value = c(2000, 2021), sep = "")),
+                                  
                                  menuItem(
                                    selectInput(
                                      "plotByDT", "Plot:",
@@ -184,9 +186,8 @@ ui <- dashboardPage(skin = "purple",
                                  ),
                                                
                         menuItem("Drug Markets", tabName = "mdrug", icon = icon("money-bills"),
-                          selectInput("drg", "Drug",
-                                      c(levels(Weekly2$DrugAZ))
-                                      ))
+                                 menuSubItem("Drug Harms Dashboard")
+                                      )
                         )),
               
                     
@@ -233,39 +234,39 @@ server <- function(input, output) {
     valueBox(paste(input$udrug), color = "purple", paste0(input$city))
   })
   
-# Infographics
+# Drug Use Infographics
   
   output$sixmonthidrs <- renderInfoBox({
-    sub <- IDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug) %>% arrange(var_year)
+    sub <- IDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug & DrugType == "any") %>% arrange(var_year)
     infoBox("Any use past 6-months",
-            paste0(tail(sub$any, n=1),"% in ", input$yr00[2]),
+            paste0(tail(sub$est, n=1),"% in ", input$yr00[2]),
             "of people who regularly inject drugs (IDRS)",
             icon = icon("calendar-check"),
             color = "blue")
   })
   
   output$sixmonthedrs <- renderInfoBox({
-    sub <- EDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug) %>% arrange(var_year)
+    sub <- EDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug & DrugType == "any") %>% arrange(var_year)
     infoBox("Any use past 6-months",
-            paste0(tail(sub$any, n=1),"% in ", input$yr00[2]),
+            paste0(tail(sub$est, n=1),"% in ", input$yr00[2]),
             "of people who regularly use ecstasy/other illicit stimulants (EDRS)",
             icon = icon("calendar-check"),
             color = "orange")
   })
   
   output$weeklyidrs <- renderInfoBox({
-    sub <- IDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug) %>% arrange(var_year)
+    sub <- IDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug & DrugType == "weekly") %>% arrange(var_year)
     infoBox("Weekly+ use past 6 months",
-            paste0(tail(sub$weekly, n=1),"% in ", input$yr00[2]),
+            paste0(tail(sub$est, n=1),"% in ", input$yr00[2]),
             "of people who regularly inject drugs (IDRS)",
             icon = icon("calendar-week"),
             color = "blue")
   })
   
   output$weeklyedrs <- renderInfoBox({
-    sub <- EDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug) %>% arrange(var_year)
+    sub <- EDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug & DrugType == "weekly") %>% arrange(var_year)
     infoBox("Weekly+ use past 6 months",
-            paste0(tail(sub$weekly, n=1),"% in ", input$yr00[2]),
+            paste0(tail(sub$est, n=1),"% in ", input$yr00[2]),
             "of people who regularly use ecstasy/other illicit stimulants (EDRS)",
             icon = icon("calendar-week"),
             color = "orange")
@@ -274,28 +275,39 @@ server <- function(input, output) {
 
   
 #---Weekly drug use plot------------------------------------------------------------------------------------------------------
-  IDRSreactive <- reactive({
-  IDRS <- IDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug)
+ 
+  # Multiple versions of these functions are necessary because 'any' and 'weekly' data is present in both datasets
+  # These data sets were rebuilt to accommodate the confidence intervals
+  
+  IDRSwreactive <- reactive({
+   IDRS <- IDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug & DrugType == "weekly")
   })
-  EDRSreactive <- reactive({
-  EDRS <- EDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug)
+  IDRSareactive <- reactive({
+    IDRS <- IDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug & DrugType == "any")
+  })
+  EDRSwreactive <- reactive({
+   EDRS <- EDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug & DrugType == "weekly")
+  })
+  EDRSareactive <- reactive({
+    EDRS <- EDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug & DrugType == "any")
   })
   
  output$WeeklyUsePlot <- renderPlotly({
+
    COLOURS <- c("IDRS" = "blue", "EDRS" = "orange")
    
    p <- ggplot() +
-     geom_line(data = IDRSreactive(), aes(x = var_year, y = weekly, colour = "IDRS")) +
-     geom_point(data = IDRSreactive(), aes(x = var_year, y = weekly, colour = "IDRS", text = paste0(
+     geom_line(data = IDRSwreactive(), aes(x = var_year, y = est, colour = "IDRS")) +
+     geom_point(data = IDRSwreactive(), aes(x = var_year, y = est, colour = "IDRS", text = paste0(
        "Year: ", var_year,
-       "<br>Use: ",weekly,"%",
+       "<br>Use: ",est,"%",
        "<br>Drug: ", Drug,
        "<br>State: ", istate
      )), size = 0.8, shape = 21) +
-     geom_line(data = EDRSreactive(), aes(x = var_year, y = weekly, colour = "EDRS")) +
-     geom_point(data = EDRSreactive(), aes(x = var_year, y = weekly, colour = "EDRS", text = paste0(
+     geom_line(data = EDRSwreactive(), aes(x = var_year, y = est, colour = "EDRS")) +
+     geom_point(data = EDRSwreactive(), aes(x = var_year, y = est, colour = "EDRS", text = paste0(
        "Year: ", var_year,
-       "<br>Use: ",weekly,"%",
+       "<br>Use: ",est,"%",
        "<br>Drug: ", Drug,
        "<br>State: ", istate
      )), size = 0.8, shape = 21) +
@@ -308,6 +320,13 @@ server <- function(input, output) {
            panel.grid.major.y = element_line(color = "gray90", linewidth = 0.2),
            panel.grid.minor.y = element_line(color = "gray90", linewidth = 0.2),
            panel.background = element_blank())
+   if (input$useCI == "pr"){
+     p <- p
+   }
+   else if (input$useCI == "prci"){
+     p <- p + geom_ribbon(data = IDRSwreactive(),aes(y = est, x=var_year, ymin = lower, ymax = upper), alpha = 0.1, size = 0) +
+       geom_ribbon(data = EDRSwreactive(), aes(y=est, x= var_year, ymin = lower, ymax = upper), alpha = 0.1, size = 0)
+   }
    
    ggplotly(p, tooltip = "text")
  })
@@ -318,17 +337,17 @@ server <- function(input, output) {
     COLOURS <- c("IDRS" = "blue", "EDRS" = "orange")
     
     p <- ggplot() +
-      geom_line(data = IDRSreactive(), aes(x = var_year, y = any, colour = "IDRS")) +
-      geom_point(data = IDRSreactive(), aes(x = var_year, y = any, colour = "IDRS", text = paste0(
+      geom_line(data = IDRSareactive(), aes(x = var_year, y = est, colour = "IDRS")) +
+      geom_point(data = IDRSareactive(), aes(x = var_year, y = est, colour = "IDRS", text = paste0(
         "Year: ", var_year,
-        "<br>Use: ",any,"%",
+        "<br>Use: ",est,"%",
         "<br>Drug: ", Drug,
         "<br>State: ", istate
       )), size = 0.8, shape = 21) +
-      geom_line(data = EDRSreactive(), aes(x = var_year, y = any, colour = "EDRS")) +
-      geom_point(data = EDRSreactive(), aes(x = var_year, y = any, colour = "EDRS", text = paste0(
+      geom_line(data = EDRSareactive(), aes(x = var_year, y = est, colour = "EDRS")) +
+      geom_point(data = EDRSareactive(), aes(x = var_year, y = est, colour = "EDRS", text = paste0(
         "Year: ", var_year,
-        "<br>Use: ",any,"%",
+        "<br>Use: ",est,"%",
         "<br>Drug: ", Drug,
         "<br>State: ", istate
       )), size = 0.8, shape = 21) +
@@ -341,7 +360,13 @@ server <- function(input, output) {
             panel.grid.major.y = element_line(color = "gray90", linewidth = 0.2),
             panel.grid.minor.y = element_line(color = "gray90", linewidth = 0.2),
             panel.background = element_blank())
-    
+    if (input$useCI == "pr"){
+      p <- p
+    }
+    else if (input$useCI == "prci"){
+      p <- p + geom_ribbon(data = IDRSareactive(),aes(y = est, x=var_year, ymin = lower, ymax = upper), alpha = 0.1, size = 0) +
+        geom_ribbon(data = EDRSareactive(), aes(y=est, x= var_year, ymin = lower, ymax = upper), alpha = 0.1, size = 0)
+    }
     ggplotly(p, tooltip = "text")
   })
   
@@ -349,60 +374,39 @@ server <- function(input, output) {
 #---Drug Harms Tab----------------------------------------------------------------------------------------------------------------------------------------------------------------
 
   hospitalReactive <- reactive({
-    
     sub <-  NHMD %>% subset(Reason=="Any" & Intent=="Any" & Age == "All ages" & jurisdiction == selectedState() & Drug == input$hdrug &
                               (year >= selectedYear()[[1]] & year <= selectedYear()[[2]])) %>% unite(AgeSex, c(Age, Sex), sep = ", ", remove = FALSE)
   })
-  
+  # Deaths data as the total for all drugs
   alldrugreactive <- reactive({
-    COD2020_All$Drug <- "All drugs"
-    COD2020_All$jurisdiction[COD2020_All$jurisdiction == "Tasmania"] <- "Tasmania*"
     alldrg <- COD2020_All %>% subset(jurisdiction== selectedState() &
                                        Age %in% "All ages" & Intent %in% "All" & Drug == selectedDrug() &
                                        (Year>= selectedYear()[1] & Year<=selectedYear()[2]) & Release=="Current") 
   })
-  
+  # Deaths data with drug breakdowns
   deathsReactive <- reactive({
-    COD2020_DT$jurisdiction[COD2020_DT$jurisdiction == "Tasmania"] <- "Tasmania*"
-    COD2020_DT$cr[COD2020_DT$cr == 0] <- NA
-    
-    COD2020_DT$Drug <- ifelse(COD2020_DT$Drug == "AMPHETAMINES", "Amphetamine-type stimulants",
-                              ifelse(COD2020_DT$Drug == "COCAINE", "Cocaine",
-                                     ifelse(COD2020_DT$Drug == "CANNABINOIDS", "Cannabinoids",
-                                            ifelse(COD2020_DT$Drug == "heroin", "Heroin", COD2020_DT$Drug))))
-    
     pd <- COD2020_DT %>% subset(jurisdiction== selectedState() &
                                    Age %in% "All ages" & Intent %in% "All" & Drug == selectedDrug() &
                                    (Year>= selectedYear()[1] & Year<=selectedYear()[2]) & Release=="Current")
   })
   
+  # IF statements to regulate which data set is used for the deaths viz
   jurdata <- reactive({
     if (selectedDrug() == "Heroin") {
-      data <- deathsReactive()
+      jurdata <- deathsReactive()
     } else if (selectedDrug() == "Cannabinoids") {
       jurdata <- deathsReactive()
     } else if (selectedDrug() == "Cocaine") {
-      data <- deathsReactive()
+      jurdata <- deathsReactive()
     } else if (selectedDrug() == "Amphetamine-type stimulants") {
       jurdata <- deathsReactive()
-    } else if (selectedDrug() == "All drugs") {
-      data <- alldrugreactive()
+    } else if (selectedDrug() == "All drugs") { # All drugs is located in a different data set
+      jurdata <- alldrugreactive()
     }
   })
   
+  # Treatment data
   treatmentReactive <- reactive({ 
-    TreatmentGrandViz$Location <- ifelse(TreatmentGrandViz$Location == "AUS", "Australia",
-                                         ifelse(TreatmentGrandViz$Location == "ACT", "Australian Capital Territory",
-                                                ifelse(TreatmentGrandViz$Location == "NSW", "New South Wales",
-                                                       ifelse(TreatmentGrandViz$Location == "NT", "Northern Territory",
-                                                              ifelse(TreatmentGrandViz$Location == "WA", "Western Australia",
-                                                                     ifelse(TreatmentGrandViz$Location == "VIC", "Victoria",
-                                                                            ifelse(TreatmentGrandViz$Location == "QLD", "Queensland", 
-                                                                                   ifelse(TreatmentGrandViz$Location == "SA", "South Australia", 
-                                                                                          ifelse(TreatmentGrandViz$Location == "TAS", "Tasmania*", TreatmentGrandViz$Location)))))))))
-    TreatmentGrandViz$Drug <- ifelse(TreatmentGrandViz$Drug == "All", "All drugs",
-                                     ifelse(TreatmentGrandViz$Drug == "Amphetamine-type stimulant", "Amphetamine-type stimulants", TreatmentGrandViz$Drug))
-    
     sub <- TreatmentGrandViz %>% subset((Year_end>=input$yr97[1] & Year_end<=input$yr97[2]) & Location == input$jur & Drug == input$hdrug)
   })
   
@@ -540,8 +544,7 @@ server <- function(input, output) {
   
 #---------------Drug deaths plot by drug, jurisdiction, intent and sex ----------------------------------
 
-  # These if statements are necessary because the input 'All Drugs' for drug deaths is in a separate dataset to the other options
-  
+
 jurdata2 <- reactive({jurdata})
 
   output$JurPlot <- renderPlotly({
@@ -660,10 +663,10 @@ jurdata2 <- reactive({jurdata})
 
 #------------ Cryptomarket visualization ------------------------------------------------------------------------
   
-  output$meth_plot <- renderPlotly({
-    mplot <- ggplot(Weekly2[(Weekly2$Week > "2020-10-08"),] 
-                    %>% subset(DrugAZ == input$drg), aes(x= Week, y = listing, color = MarketAZ)) + geom_line()
-  })
+#   output$meth_plot <- renderPlotly({
+#     mplot <- ggplot(Weekly2[(Weekly2$Week > "2020-10-08"),] 
+#                     %>% subset(DrugAZ == input$drg), aes(x= Week, y = listing, color = MarketAZ)) + geom_line()
+#   })
 }
 
 # Run the application 
