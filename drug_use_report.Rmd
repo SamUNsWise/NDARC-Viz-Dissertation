@@ -1,0 +1,96 @@
+---
+title: "Trends in `r params$udrug` use in `r paste0(params$city)`, `r params$yr00[1]`
+  - `r params$yr00[2]`"
+author: "Drug Trends"
+output:
+  pdf_document: default
+  html_document: default
+params:
+  yr00: NA
+  city: NA
+  udrug: NA
+  IDRSw: IDRSwreactive()
+  IDRSa: IDRSareactive()
+  EDRSw: EDRSwreactive()
+  EDRSa: EDRSareactive()
+---
+
+This page contains data on drug use in Australia from various sources, including the Ecstasy and Related Drugs Reporting System (EDRS) and Illicit Drug Reporting System (IDRS). Please note that these findings may not be representative of all people in Australia, nor of all people who use drugs. There can be differences between data sources in how they capture each drug type. See the methods tab for further information and link to the source data.
+
+```{r, echo = FALSE, include=FALSE}
+library(shiny)
+library(plotly)
+library(ggplot2)
+library(tidyverse)
+library(readxl)
+library(dplyr)
+```
+
+## Weekly Use
+
+This plot presents the percentage of IDRS and EDRS participants from `r paste0(ifelse(params$city %in% c("ACT","NT"),'the ',''),params$city)` who reported at least weekly use in the last 6 months related to `r params$udrug`. In `r params$yr00[2]` `r paste0(tail(params$IDRSw$est, n=1),"%")` of IDRS respondents reported weekly or more frequent use, compared to `r paste0(tail(params$EDRSw$est, n=1),"%")` in the EDRS.
+
+```{r, echo = FALSE, warning=FALSE}
+COLOURS <- c("IDRS" = "blue", "EDRS" = "orange")
+p <- ggplot() +
+     geom_line(data = params$IDRSw, aes(x = var_year, y = est, colour = "IDRS")) +
+     geom_point(data = params$IDRSw, aes(x = var_year, y = est, colour = "IDRS", text = paste0(
+       "Year: ", var_year,
+       "<br>Use: ",est,"%",
+       "<br>Drug: ", params$udrug,
+       "<br>State: ", params$city
+     )), size = 0.8, shape = 21) +
+     geom_line(data = params$EDRSw, aes(x = var_year, y = est, colour = "EDRS")) +
+     geom_point(data = params$EDRSw, aes(x = var_year, y = est, colour = "EDRS", text = paste0(
+       "Year: ", var_year,
+       "<br>Use: ",est,"%",
+       "<br>Drug: ", params$udrug,
+       "<br>State: ", params$city
+     )), size = 0.8, shape = 21) +
+     scale_color_manual(values = COLOURS, name = "Data source") +
+     labs(x = "Year",  y = "% Samples who regularly use drugs", colour = "Data source") +
+     scale_x_continuous(breaks = c(2000, 2003, 2006, 2009, 2012, 2015, 2018, 2021),
+                        labels=c("2000", '2003', '2006', '2009', '2012', '2015', '2018', '2021')) +
+     scale_y_continuous(limits = c(0,100), breaks = seq(0, 100, 10)) +
+     theme(axis.text.x = element_text(angle = 35, hjust = 1), panel.grid.major.x = element_blank(),
+           panel.grid.major.y = element_line(color = "gray90", linewidth = 0.2),
+           panel.grid.minor.y = element_line(color = "gray90", linewidth = 0.2),
+           panel.background = element_blank())
+   
+   ggplotly(p, tooltip = "text")
+```
+
+## Six Month Use
+
+This plot presents the percentage of IDRS and EDRS participants from `r paste0(ifelse(params$city %in% c("ACT","NT"),'the ',''),params$city)` who responded 'yes' to any question related to `r params$udrug` use in the SIX MONTHS prior to the survey. In `r params$yr00[2]` `r paste0(tail(params$IDRSa$est, n=1),"%")` of IDRS respondents reported weekly or more frequent use, compared to `r paste0(tail(params$EDRSa$est, n=1),"%")` in the EDRS. 
+
+```{r, echo = FALSE, warning=FALSE}
+COLOURS <- c("IDRS" = "blue", "EDRS" = "orange")
+p <- ggplot() +
+     geom_line(data = params$IDRSa, aes(x = var_year, y = est, colour = "IDRS")) +
+     geom_point(data = params$IDRSa, aes(x = var_year, y = est, colour = "IDRS", text = paste0(
+       "Year: ", var_year,
+       "<br>Use: ",est,"%",
+       "<br>Drug: ", params$udrug,
+       "<br>State: ", params$city
+     )), size = 0.8, shape = 21) +
+     geom_line(data = params$EDRSa, aes(x = var_year, y = est, colour = "EDRS")) +
+     geom_point(data = params$EDRSa, aes(x = var_year, y = est, colour = "EDRS", text = paste0(
+       "Year: ", var_year,
+       "<br>Use: ",est,"%",
+       "<br>Drug: ", params$udrug,
+       "<br>State: ", params$city
+     )), size = 0.8, shape = 21) +
+     scale_color_manual(values = COLOURS, name = "Data source") +
+     labs(x = "Year",  y = "% Samples who regularly use drugs", colour = "Data source") +
+     scale_x_continuous(breaks = c(2000, 2003, 2006, 2009, 2012, 2015, 2018, 2021),
+                        labels=c("2000", '2003', '2006', '2009', '2012', '2015', '2018', '2021')) +
+     scale_y_continuous(limits = c(0,100), breaks = seq(0, 100, 10)) +
+     theme(axis.text.x = element_text(angle = 35, hjust = 1), panel.grid.major.x = element_blank(),
+           panel.grid.major.y = element_line(color = "gray90", linewidth = 0.2),
+           panel.grid.minor.y = element_line(color = "gray90", linewidth = 0.2),
+           panel.background = element_blank())
+   
+   ggplotly(p, tooltip = "text")
+
+```

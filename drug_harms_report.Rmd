@@ -1,0 +1,104 @@
+---
+title: "Trends in harms associated with `r params$hdrug` in `r paste0(params$jur)`, `r params$yr97[1]`
+  - `r params$yr97[2]`"
+author: "Drug Trends"
+output:
+  pdf_document: default
+  html_document: default
+params:
+  yr97: NA
+  jur: NA
+  hdrug: NA
+  hospital: hospitalReactive()
+  treatment: treatmentReactive()
+  jurdata: jurdata()
+---
+
+This page contains data on drug harms in Australia from various sources, including the National Hospital Morbidity Database (NHMD), Cause of Death Unit Record File (COD-URF) and The National Alcohol and Other Drug Treatment Services National Minimum Data Set (AODTS NMDS). Principal diagnosis was used to identify drug-induced deaths and hospitalizations. The menu option 'All drugs' is the sum of all drugs within the datasets and includes drugs that are currently unavailable in isolation.
+
+```{r, echo = FALSE, include=FALSE}
+library(shiny)
+library(plotly)
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(haven)
+```
+
+## Drug-induced Hospitalisations
+
+This plot depicts the rate of hospitalisations caused by `r params$hdrug` in `r params$jur` from `r params$yr97[1]` - `r params$yr97[2]`. The mean rate for all genders in `r params$yr97[2]` was `r paste0(round(tail(params$hospital$cr, n=1),digits=1))` per 100,000 people.
+
+```{r, echo = FALSE, warning=FALSE}
+p <- ggplot(params$hospital) + aes(x = year, y = cr, colour = Sex, linetype = Sex, group = 1, text = paste0(
+                      "Year: ", year,
+                      "<br>Location: ", jurisdiction,
+                      "<br>Drug: ", Drug,
+                      "<br>Hospitalisations: ", n,
+                      "<br>Crude Rate: ", cr_p
+                    )) +
+       geom_line() + geom_point(size=0.55) +
+       labs(x = "Financial Year", colour = "", linetype = "") +
+       scale_color_manual(values = c("red", "blue", "black")) +
+       scale_linetype_manual(values = c("dashed", "dotdash", "solid")) +
+       theme(panel.grid.major.x = element_blank(),
+             panel.grid.major.y = element_line(color = "gray90", linewidth = 0.2),
+             panel.grid.minor.y = element_line(color = "gray90", linewidth = 0.2),
+             panel.background = element_blank()) +
+       scale_x_continuous(breaks = c(2000, 2005, 2010, 2015, 2020),
+                          labels=c("2000", '2005', '2010', '2015', '2020')) + 
+       scale_y_continuous(limits = c(0, max(params$hospital$cr_uci, 2.5))) +
+         labs(x = "Financial Year", y = "Crude Rate per 100,000")
+ggplotly(p, tooltip = "text")
+```
+
+## Drug-induced Deaths
+
+This plot depicts the rate per 100,000 people for deaths where `r params$hdrug` was the principal cause. These deaths were reported in `r params$jur` and the mean rate was `r paste0(round(tail(params$jurdata$cr, n=1), digits = 1))` per 100,000 people in `r params$yr97[2]`.
+
+```{r, echo = FALSE, warning=FALSE}
+
+gp <- ggplot(params$jurdata, aes(x = Year, y= cr, colour = Sex, linetype = Sex, group = 1, text = paste0(
+      "Year: ", Year,
+      "<br>Location: ", jurisdiction,
+      "<br>Drug: ", Drug,
+      "<br>Deaths: ", n,
+      "<br>Crude Rate: ", cr_p
+    ))) + geom_point(size=0.55) +
+    labs(x = "Year", colour = "", linetype = "") + 
+      scale_color_manual(values = c("red", "blue", "black")) +
+      scale_linetype_manual(values = c("dashed", "dotdash", "solid")) +
+      theme_light() + geom_line() + 
+      scale_y_continuous(limits = c(0, max(params$jurdata$cr_uci, 2.5))) +
+      labs(x = "Year", y = "Crude Rate per 100,000")
+    ggplotly(gp, tooltip="text")
+
+```
+
+## Use of illicit drug treatment services
+                       
+Treatment services in `r params$jur` for `r params$hdrug` were utilized at a rate of `r paste0(round(tail(params$treatment$cr, n=1), digits = 1))` per 100,000 people in `r params$yr97[2]`. The rate when the current reporting period began was `r paste0(round(head(params$treatment$cr, n=1), digits = 1))` in `r params$yr97[1]`.
+
+```{r, echo = FALSE, warning=FALSE}
+gp <- ggplot(params$treatment) + aes(x = Year_end, y = cr, colour = Sex, linetype = Sex, group = 1, 
+                          text = paste0(
+                            "Year ", Year_end,
+                            "<br>Crude rate: ", round(cr, digits = 3),
+                            "<br>Location: ", Location,
+                            "<br>Drug: ", Drug
+                          )) + 
+      geom_point(size=0.55) +
+      labs(x = "Year", colour = "", linetype="") + 
+      scale_color_manual(values = c("red", "blue", "black")) +
+      scale_linetype_manual(values = c("dashed", "dotdash", "solid")) +
+      theme(panel.grid.major.x = element_blank(),
+            panel.grid.major.y = element_line(color = "gray90", linewidth = 0.2),
+            panel.grid.minor.y = element_line(color = "gray90", linewidth = 0.2),
+            panel.background = element_blank())+ geom_line() + 
+        scale_y_continuous(limits = c(0, max(params$treatment$cr_uci, 2.5))) +
+        labs(x = "Year", y = "Crude Rate per 100,000")
+    ggplotly(gp, tooltip="text")
+
+```
+
+

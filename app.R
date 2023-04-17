@@ -25,6 +25,7 @@ library(plotly)
 library(shinycustomloader)
 library(readxl)
 library(haven)
+library(tinytex)
 
 
 #----Loading relevant data sets--------------------------------------------------------------------------------
@@ -53,10 +54,10 @@ drug_use <- fluidRow(valueBoxOutput("useheader", width = 12),
                          solidHeader = TRUE, collapsible = TRUE, width = 12),
                      tabBox(title = paste0("Six Month Use"),
                             tabPanel("Plot", withLoader(plotlyOutput("SixMonthUse", width = "100%"), type="image", loader="DT_NIDIP_tween.gif")),
-                            tabPanel("Methods")),
+                            tabPanel("Notes", includeHTML("IDRS_EDRS.html"))),
                      tabBox(title = "Weekly Use",
                             tabPanel("Plot", withLoader(plotlyOutput("WeeklyUsePlot", width = "100%"), type="image", loader="DT_NIDIP_tween.gif")),
-                            tabPanel("Methods")
+                            tabPanel("Notes", includeHTML("IDRS_EDRS.html"))
                             )
                      )
 
@@ -65,8 +66,9 @@ drug_harms <- fluidRow(valueBoxOutput("harmsheader", width = 12),
                        infoBoxOutput("hosp_rate"),
                        infoBoxOutput("treat"),
                        box(title= "Summary Information", solidHeader = TRUE, collapsible = TRUE, width = 12,
-                           "This space will include key summary statistics for the drug that has been selected. 
-                           It will also provide a written description of the individual plots depicted on the page."),
+                           "This page contains data on drug harms in Australia from various sources, including the National Hospital Morbidity Database (NHMD), Cause of Death Unit Record File (COD-URF) and", 
+                           "The National Alcohol and Other Drug Treatment Services National Minimum Data Set (AODTS NMDS). Principal diagnosis was used to identify drug-induced deaths and hospitalisations.",
+                           "The menu option 'All drugs' is the sum of all drugs within the datasets and includes drugs that are currently unavailable in isolation."),
                        tabBox(title = "Drug Related Hospitalisations",
                           tabPanel("Plot", withLoader(plotlyOutput("ByDrugPlot", width="100%"), type="image", loader="DT_NIDIP_tween.gif")),
                           tabPanel("Notes", includeHTML("notesByDrug.html"), 'For more detailed notes for this dataset please visit: "https://ndarc.med.unsw.edu.au/resource-analytics/trends-drug-related-hospitalisations-australia-1999-2021"'
@@ -79,7 +81,7 @@ drug_harms <- fluidRow(valueBoxOutput("harmsheader", width = 12),
                           tabPanel("ICD-10", includeHTML("notesDT.html"))),
                        tabBox(title = "Treatment Recipients", 
                               tabPanel("Plot", withLoader(plotlyOutput("treatment", width = "100%"), type ="image", loader="DT_NIDIP_tween.gif")),
-                              tabPanel("Notes", "Notes")))
+                              tabPanel("Notes", "The first data were collected for 2000-01 as a pilot year. Data from 2001 onwards contains information about the rate at which alcohol and other drug treatment services are utilised within the Australian population.")))
 
 drug_markets <- fluidRow(
                          infoBox("Hospitalisation rate", "254", "per 100,000 people", color = "red"),
@@ -137,10 +139,10 @@ ui <- dashboardPage(skin = "purple",
                                               value = c(2000, 2022), sep="")),
                               
                               menuItem(
-                                radioButtons('format', 'Document format', c('PDF', 'HTML', 'Word'),
+                                radioButtons('formatuse', 'Document format', c('PDF', 'HTML', 'Word'),
                                            inline = TRUE)),
                               menuItem(
-                                downloadButton("report", "Download Report:"))),
+                                downloadButton("reportuse", "Download Report:"))),
                                   
 #----Drug Harms sidebar menu-------------------------------------------------------------------------------
                         menuItem("Drug Harms", tabName = "hdrug", icon = icon("hospital"),
@@ -179,14 +181,16 @@ ui <- dashboardPage(skin = "purple",
                                   menuItem(
                                     sliderInput("yr97", "Period",
                                                 min=1997, max=2021,
-                                                value=c(1997, 2021), sep="")
-                                 ),
-                                 
-                                   menuSubItem("Explanatory Notes", tabName = "usenotes")
+                                                value=c(1997, 2021), sep="")),
+                                 menuItem(
+                                   radioButtons('formatharms', 'Document format', c('PDF', 'HTML', 'Word'),
+                                                inline = TRUE)),
+                                 menuItem(
+                                   downloadButton("reportharms", "Download Report:"))
                                  ),
                                                
                         menuItem("Drug Markets", tabName = "mdrug", icon = icon("money-bills"),
-                                 menuSubItem("Drug Harms Dashboard")
+                                 menuSubItem("Drug Markets Dashboard")
                                       )
                         )),
               
@@ -328,7 +332,14 @@ server <- function(input, output) {
        geom_ribbon(data = EDRSwreactive(), aes(y=est, x= var_year, ymin = lower, ymax = upper), alpha = 0.1, size = 0)
    }
    
-   ggplotly(p, tooltip = "text")
+   ggplotly(p, tooltip = "text") %>%
+     add_annotations(
+       text = 'Source: <a href="https://ndarc.med.unsw.edu.au/resource/australian-drug-trends-2022-key-findings-national-illicit-drug-reporting-system-idrs">IDRS</a> <a href="https://ndarc.med.unsw.edu.au/resource/australian-drug-trends-2022-key-findings-national-ecstasy-and-related-drugs-reporting-system-edrs">EDRS</a>, NDARC',
+       xref = "paper", yref = "paper",
+       x = 0, xanchor = "left",
+       y = 1.04, yanchor = "top",
+       showarrow = F, font = list(size = 10, color = "grey")
+     )
  })
   
 #---Six Month Drug Use---------------------------------------------------------------------------------------------------------
@@ -367,7 +378,14 @@ server <- function(input, output) {
       p <- p + geom_ribbon(data = IDRSareactive(),aes(y = est, x=var_year, ymin = lower, ymax = upper), alpha = 0.1, size = 0) +
         geom_ribbon(data = EDRSareactive(), aes(y=est, x= var_year, ymin = lower, ymax = upper), alpha = 0.1, size = 0)
     }
-    ggplotly(p, tooltip = "text")
+    ggplotly(p, tooltip = "text") %>%
+      add_annotations(
+        text = 'Source: <a href="https://ndarc.med.unsw.edu.au/resource/australian-drug-trends-2022-key-findings-national-illicit-drug-reporting-system-idrs">IDRS</a> <a href="https://ndarc.med.unsw.edu.au/resource/australian-drug-trends-2022-key-findings-national-ecstasy-and-related-drugs-reporting-system-edrs">EDRS</a>, NDARC',
+        xref = "paper", yref = "paper",
+        x = 0, xanchor = "left",
+        y = 1.04, yanchor = "top",
+        showarrow = F, font = list(size = 10, color = "grey")
+      )
   })
   
 
@@ -416,11 +434,11 @@ server <- function(input, output) {
   output$death_rate <- renderInfoBox({
     yr <- selectedYear()
     deaths_box <- jurdata() %>% arrange(Year) %>% subset(jurisdiction== selectedState() &
-                    Age %in% "All ages" & Intent %in% "All" & Sex == "People" &
+                    Age %in% "All ages" & Intent %in% "All" & Sex == "Total" &
                     (Year>=yr[[1]] & Year<=yr[[2]]) & Release=="Current" & Drug == selectedDrug())
     infoBox(
-      "Most recent Death rate:",
-      round(tail(deaths_box$cr, n=1), digits = 1),
+      "Death rate:",
+      paste0(round(tail(deaths_box$cr, n=1), digits = 1)," in ", input$yr97[2]),
       "per 100,000 people",
       icon = icon("line-chart"),
       color = "purple"
@@ -433,8 +451,8 @@ server <- function(input, output) {
                                   (year >= selectedYear()[[1]] & year <= selectedYear()[[2]])) %>% unite(AgeSex, c(Age, Sex), sep = ", ", remove = FALSE)
     
     infoBox(
-      "Most recent Hospitalisation rate:",
-      round(tail(hosp_box$cr, n=1), digits = 1),
+      "Hospitalisation rate:",
+      paste0(round(tail(hosp_box$cr, n=1), digits = 1)," in ", input$yr97[2]),
       "per 100,000 people",
       icon = icon("stethoscope"),
       color = "blue"
@@ -445,8 +463,8 @@ server <- function(input, output) {
   output$treat <- renderInfoBox({
    
     infoBox(
-      "Most recent Treatment rate:",
-      round(tail(treatmentReactive()$cr, n=1), digits = 1),
+      "Treatment rate:",
+      paste0(round(tail(treatmentReactive()$cr, n=1), digits = 1)," in ",input$yr97[2]),
       "per 100,000 people",
       icon = icon("user-nurse"),
       color = "purple"
@@ -456,7 +474,7 @@ server <- function(input, output) {
 
   
   output$harmsheader <- renderValueBox({
-    valueBox(paste(input$jur), color = "purple", "Drug Harms")
+    valueBox(paste(input$jur), color = "purple", paste(input$hdrug))
   })
   
   # output$strend <- renderValueBox({
@@ -464,17 +482,19 @@ server <- function(input, output) {
   # })
 
 #---Hospitalization Plot in the Drug Harms Tab--------------------------------------------------------------------------------
-  
+
+
    output$ByDrugPlot <- renderPlotly({
 
-     p <- ggplot(hospitalReactive()) + aes(x = year, colour = Sex, group = 1) +
+     p <- ggplot(hospitalReactive()) + aes(x = year, colour = Sex, linetype = Sex, group = 1) +
        geom_line() + geom_point(size=0.55) +
        labs(x = "Financial Year", colour = "", linetype = "") +
+       scale_color_manual(values = c("red", "blue", "black")) +
+       scale_linetype_manual(values = c("dashed", "dotdash", "solid")) +
        theme(panel.grid.major.x = element_blank(),
              panel.grid.major.y = element_line(color = "gray90", linewidth = 0.2),
              panel.grid.minor.y = element_line(color = "gray90", linewidth = 0.2),
              panel.background = element_blank()) +
-       #theme(legend.title = element_blank()) +
        scale_x_continuous(breaks = c(2000, 2005, 2010, 2015, 2020),
                           labels=c("2000", '2005', '2010', '2015', '2020'))
      
@@ -535,7 +555,7 @@ server <- function(input, output) {
          ))
    })
   
-  
+  # These are the notes and ICD-AM files for the Harms tab
   output$drugtypetable <- renderTable({drugtypes.data},sanitize.text.function=function(x){x})
   
   output$diagnosistable <- renderTable(diagnosistable.data)
@@ -550,14 +570,18 @@ jurdata2 <- reactive({jurdata})
   output$JurPlot <- renderPlotly({
     # Plot settings that are the same for all possible inputs
     
-    gp <- ggplot(jurdata(), aes(x = Year, colour = Sex, group = 1, text = paste0(
+    gp <- ggplot(jurdata(), aes(x = Year, colour = Sex, linetype = Sex, group = 1, text = paste0(
       "Year: ", Year,
       "<br>Location: ", jurisdiction,
       "<br>Drug: ", Drug,
       "<br>Deaths: ", n,
       "<br>Crude Rate: ", cr_p
     ))) + geom_point(size=0.55) +
-    labs(x = "Year", colour = "", linetype = "") + theme_light()
+    labs(x = "Year", colour = "", linetype = "") + 
+      scale_color_manual(values = c("red", "blue", "black")) +
+      scale_linetype_manual(values = c("dashed", "dotdash", "solid")) +
+      theme_light()
+    
     # Crude rate per 100,000
     if (input$plotByDT == "cr" | input$plotByDT == "crci") {
       gp <- gp + geom_line() + 
@@ -608,6 +632,8 @@ jurdata2 <- reactive({jurdata})
                           )) + 
       geom_point(size=0.55) +
       labs(x = "Year", colour = "", linetype="") + 
+      scale_color_manual(values = c("red", "blue", "black")) +
+      scale_linetype_manual(values = c("dashed", "dotdash", "solid")) +
       theme(panel.grid.major.x = element_blank(),
             panel.grid.major.y = element_line(color = "gray90", linewidth = 0.2),
             panel.grid.minor.y = element_line(color = "gray90", linewidth = 0.2),
@@ -630,10 +656,10 @@ jurdata2 <- reactive({jurdata})
 
 #---Download button----------------------------------------------------------------------------------------
 
-  output$report <- downloadHandler(
+  output$reportuse <- downloadHandler(
     filename = function() {
       paste('drug_use_report', sep = '.', switch(
-        input$format, PDF = 'pdf', HTML = 'html', Word = 'docx'
+        input$formatuse, PDF = 'pdf', HTML = 'html', Word = 'docx'
       ))
     },
     
@@ -648,19 +674,52 @@ jurdata2 <- reactive({jurdata})
       params <- list(yr00 = input$yr00,
                      city = input$city,
                      udrug = input$udrug,
-                     IDRS = IDRSreactive(),
-                     EDRS = EDRSreactive())
+                     IDRSw = IDRSwreactive(),
+                     IDRSa = IDRSareactive(),
+                     EDRSa = EDRSareactive(),
+                     EDRSw = EDRSwreactive())
       library(rmarkdown)
       out <- render('drug_use_report.Rmd', switch(
-        input$format,
+        input$formatuse,
         HTML = html_document(), PDF = pdf_document(), Word = word_document()),
         params = params,
         envir = new.env(parent = globalenv()))
       file.rename(out, file)
     }
   )
-  
 
+#---Drug Harms Downloadable Report------------------------------------------------------------------------------------------------------------  
+  
+  output$reportharms <- downloadHandler(
+    filename = function() {
+      paste('drug_harms_report', sep = '.', switch(
+        input$formatharms, PDF = 'pdf', HTML = 'html', Word = 'docx'
+      ))
+    },
+    
+    content = function(file) {
+      src <- normalizePath('drug_harms_report.Rmd')
+      
+      # temporarily switch to the temp dir, in case you do not have write
+      # permission to the current working directory
+      owd <- setwd(tempdir())
+      on.exit(setwd(owd))
+      file.copy(src, 'drug_harms_report.Rmd', overwrite = TRUE)
+      params <- list(yr97 = input$yr97,
+                     jur = input$jur,
+                     hdrug = input$hdrug,
+                     jurdata = jurdata(),
+                     treatment = treatmentReactive(),
+                     hospital = hospitalReactive())
+      library(rmarkdown)
+      out <- render('drug_harms_report.Rmd', switch(
+        input$formatharms,
+        HTML = html_document(), PDF = pdf_document(), Word = word_document()),
+        params = params,
+        envir = new.env(parent = globalenv()))
+      file.rename(out, file)
+    }
+  )
 #------------ Cryptomarket visualization ------------------------------------------------------------------------
   
 #   output$meth_plot <- renderPlotly({
