@@ -23,6 +23,8 @@ library(ggplot2)
 library(tidyverse)
 library(dplyr)
 library(haven)
+library(tinytex)
+library(officer)
 ```
 
 ## Drug-induced Hospitalisations

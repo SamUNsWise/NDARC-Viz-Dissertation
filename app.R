@@ -8,6 +8,7 @@
 #
 # Author: Samuel Jones
 # Purpose: Provide an interactive visualization platform for Drug Trends
+# Date: 22/04/23
 
 #----Installing packages---------------------------------------------------------
 
@@ -26,7 +27,8 @@ library(shinycustomloader)
 library(readxl)
 library(haven)
 library(tinytex)
-
+library(officer)
+library(DescTools)
 
 #----Loading relevant data sets--------------------------------------------------------------------------------
 
@@ -43,8 +45,8 @@ nams = names(NHMD)
 
 #----UI content for each of the tabs in the dataset-------------------------------------------------------------
 
-drug_use <- fluidRow(valueBoxOutput("useheader", width = 12),
-                     infoBoxOutput("sixmonthidrs", width = 3),
+drug_use <- fluidRow(valueBoxOutput("useheader", width = 12), # Header
+                     infoBoxOutput("sixmonthidrs", width = 3), # Infographics
                      infoBoxOutput("sixmonthedrs", width = 3),
                      infoBoxOutput("weeklyidrs", width = 3),
                      infoBoxOutput("weeklyedrs", width = 3),
@@ -52,31 +54,31 @@ drug_use <- fluidRow(valueBoxOutput("useheader", width = 12),
                          "Illicit Drug Reporting System (IDRS). Please note that these findings may not be representative of all people in Australia, nor of all people who use drugs. There can be",
                          "differences between data sources in how they capture each drug type. See the methods tab for further information and link to the source data.",
                          solidHeader = TRUE, collapsible = TRUE, width = 12),
-                     tabBox(title = paste0("Six Month Use"),
+                     tabBox(title = paste0("Six Month Use"), # Six month use plot
                             tabPanel("Plot", withLoader(plotlyOutput("SixMonthUse", width = "100%"), type="image", loader="DT_NIDIP_tween.gif")),
                             tabPanel("Notes", includeHTML("IDRS_EDRS.html"))),
-                     tabBox(title = "Weekly Use",
+                     tabBox(title = "Weekly Use", # Weekly use plot
                             tabPanel("Plot", withLoader(plotlyOutput("WeeklyUsePlot", width = "100%"), type="image", loader="DT_NIDIP_tween.gif")),
                             tabPanel("Notes", includeHTML("IDRS_EDRS.html"))
                             )
                      )
 
 drug_harms <- fluidRow(valueBoxOutput("harmsheader", width = 12), 
-                       infoBoxOutput("death_rate"),
                        infoBoxOutput("hosp_rate"),
+                       infoBoxOutput("death_rate"),
                        infoBoxOutput("treat"),
                        box(title= "Summary Information", solidHeader = TRUE, collapsible = TRUE, width = 12,
                            "This page contains data on drug harms in Australia from various sources, including the National Hospital Morbidity Database (NHMD), Cause of Death Unit Record File (COD-URF) and", 
                            "The National Alcohol and Other Drug Treatment Services National Minimum Data Set (AODTS NMDS). Principal diagnosis was used to identify drug-induced deaths and hospitalisations.",
-                           "The menu option 'All drugs' is the sum of all drugs within the datasets and includes drugs that are currently unavailable in isolation."),
+                           "Where 'All drugs' is depicted, it refers to the sum of all drugs within the datasets and includes drugs that are currently unavailable in isolation."),
                        tabBox(title = "Drug Related Hospitalisations",
                           tabPanel("Plot", withLoader(plotlyOutput("ByDrugPlot", width="100%"), type="image", loader="DT_NIDIP_tween.gif")),
-                          tabPanel("Notes", includeHTML("notesByDrug.html"), 'For more detailed notes for this dataset please visit: "https://ndarc.med.unsw.edu.au/resource-analytics/trends-drug-related-hospitalisations-australia-1999-2021"'
+                          tabPanel("Notes", includeHTML("notesByDrug.html")
                                     ),
                           tabPanel("ICD-10-AM", tableOutput('drugtypetable'))),
                        tabBox(title = "Drug Induced Deaths",
                           tabPanel("Plot", withLoader(plotlyOutput("JurPlot", width="100%"), type="image", loader="DT_NIDIP_tween.gif")),
-                          tabPanel("Notes", includeHTML("fnoteDTJ.html"), 'For more detailed notes for this dataset please visit: "https://ndarc.med.unsw.edu.au/resource-analytics/trends-drug-induced-deaths-australia-1997-2020"'
+                          tabPanel("Notes", includeHTML("fnoteDTJ.html")
                                    ),
                           tabPanel("ICD-10", includeHTML("notesDT.html"))),
                        tabBox(title = "Treatment Recipients", 
@@ -94,12 +96,7 @@ drug_markets <- fluidRow(
 #----UI Sidebar Content--------------------------------------------------------------------------------------------------
 
 ui <- dashboardPage(skin = "purple",
-                    dashboardHeader(title = "Drug Trends App", 
-                                    dropdownMenu(
-                                      type = "notifications", 
-                                      headerText = strong("HELP"), 
-                                      icon = icon("question"), 
-                                      badgeStatus = NULL)), 
+                    dashboardHeader(title = "Drug Trends App"), 
                     dashboardSidebar(
                       sidebarMenu(
                         # Setting id makes input$tabs give the tabName of currently-selected tab
@@ -139,7 +136,7 @@ ui <- dashboardPage(skin = "purple",
                                               value = c(2000, 2022), sep="")),
                               
                               menuItem(
-                                radioButtons('formatuse', 'Document format', c('PDF', 'HTML', 'Word'),
+                                radioButtons('formatuse', 'Document format', c('HTML'), #, 'PDF', 'Word'),
                                            inline = TRUE)),
                               menuItem(
                                 downloadButton("reportuse", "Download Report:"))),
@@ -183,7 +180,7 @@ ui <- dashboardPage(skin = "purple",
                                                 min=1997, max=2021,
                                                 value=c(1997, 2021), sep="")),
                                  menuItem(
-                                   radioButtons('formatharms', 'Document format', c('PDF', 'HTML', 'Word'),
+                                   radioButtons('formatharms', 'Document format', c('HTML'),#, 'PDF', 'Word'),
                                                 inline = TRUE)),
                                  menuItem(
                                    downloadButton("reportharms", "Download Report:"))
@@ -191,7 +188,8 @@ ui <- dashboardPage(skin = "purple",
                                                
                         menuItem("Drug Markets", tabName = "mdrug", icon = icon("money-bills"),
                                  menuSubItem("Drug Markets Dashboard")
-                                      )
+                                      ),
+                        menuItem("Additional resources", tabName = "notes", icon = icon("question"))
                         )),
               
                     
@@ -210,7 +208,9 @@ ui <- dashboardPage(skin = "purple",
                         tabItem("drgharms", drug_harms),
                         tabItem("usenotes", "Detailed notes on the data sources and potential limiations of the 
                                 data will appear in this tab"),
-                        tabItem("mdrug", drug_markets)
+                        tabItem("mdrug", drug_markets),
+                        tabItem("notes", fluidRow(
+                          column(width = 10, includeHTML("notesCitation.html"))))
                       ))
 )
 
@@ -261,7 +261,7 @@ server <- function(input, output) {
   output$weeklyidrs <- renderInfoBox({
     sub <- IDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug & DrugType == "weekly") %>% arrange(var_year)
     infoBox("Weekly+ use past 6 months",
-            paste0(tail(sub$est, n=1),"% in ", input$yr00[2]),
+            ifelse(!is.na(tail(sub$est, n=1)),paste0(tail(sub$est, n=1),"% in ", input$yr00[2]),"No data available"),
             "of people who regularly inject drugs (IDRS)",
             icon = icon("calendar-week"),
             color = "blue")
@@ -270,7 +270,7 @@ server <- function(input, output) {
   output$weeklyedrs <- renderInfoBox({
     sub <- EDRS %>% subset((var_year>=input$yr00[1] & var_year<=input$yr00[2]) & istate == input$city & Drug == input$udrug & DrugType == "weekly") %>% arrange(var_year)
     infoBox("Weekly+ use past 6 months",
-            paste0(tail(sub$est, n=1),"% in ", input$yr00[2]),
+            ifelse(!is.na(tail(sub$est, n=1)),paste0(tail(sub$est, n=1),"% in ", input$yr00[2]),"No data available"),
             "of people who regularly use ecstasy/other illicit stimulants (EDRS)",
             icon = icon("calendar-week"),
             color = "orange")
@@ -410,15 +410,9 @@ server <- function(input, output) {
   
   # IF statements to regulate which data set is used for the deaths viz
   jurdata <- reactive({
-    if (selectedDrug() == "Heroin") {
+    if (selectedDrug() %in% c("Heroin", "Cannabinoids", "Cocaine", "Amphetamine-type stimulants")) {
       jurdata <- deathsReactive()
-    } else if (selectedDrug() == "Cannabinoids") {
-      jurdata <- deathsReactive()
-    } else if (selectedDrug() == "Cocaine") {
-      jurdata <- deathsReactive()
-    } else if (selectedDrug() == "Amphetamine-type stimulants") {
-      jurdata <- deathsReactive()
-    } else if (selectedDrug() == "All drugs") { # All drugs is located in a different data set
+    } else if (selectedDrug() == "All drugs") { # 'All drugs' is located in a different data set
       jurdata <- alldrugreactive()
     }
   })
@@ -438,10 +432,10 @@ server <- function(input, output) {
                     (Year>=yr[[1]] & Year<=yr[[2]]) & Release=="Current" & Drug == selectedDrug())
     infoBox(
       "Death rate:",
-      paste0(round(tail(deaths_box$cr, n=1), digits = 1)," in ", input$yr97[2]),
+      ifelse(!is.na(tail(deaths_box$cr, n=1)), paste0(round(tail(deaths_box$cr, n=1), digits = 1)," in ", input$yr97[2]),"No data available"),
       "per 100,000 people",
       icon = icon("line-chart"),
-      color = "purple"
+      color = "blue"
     )
   })
 
@@ -452,19 +446,19 @@ server <- function(input, output) {
     
     infoBox(
       "Hospitalisation rate:",
-      paste0(round(tail(hosp_box$cr, n=1), digits = 1)," in ", input$yr97[2]),
+      ifelse(nrow(hosp_box) > 0, paste0(round(tail(hosp_box$cr, n=1), digits = 1)," in ", input$yr97[2]),"No data available"),
       "per 100,000 people",
       icon = icon("stethoscope"),
-      color = "blue"
+      color = "purple"
     )
   })
-  
+
 # INFOGRAPHIC 3
   output$treat <- renderInfoBox({
    
     infoBox(
       "Treatment rate:",
-      paste0(round(tail(treatmentReactive()$cr, n=1), digits = 1)," in ",input$yr97[2]),
+      ifelse(!is.na(tail(treatmentReactive()$cr, n=1)),paste0(round(tail(treatmentReactive()$cr, n=1), digits = 1)," in ",input$yr97[2]),"No data available"),
       "per 100,000 people",
       icon = icon("user-nurse"),
       color = "purple"
@@ -605,7 +599,7 @@ jurdata2 <- reactive({jurdata})
 
     gp <- gp + theme(panel.grid.minor.x = element_blank(), panel.grid.major.x = element_blank())
     
-    validate(need(nrow(jurdata()) > 0, "No data selected or data unavailable"))
+    validate(need(!is.na(tail(jurdata()$cr, n=1)), "No data selected or data unavailable"))
     
     # Adding a link to the most recent paper and the source
     ggplotly(gp, tooltip="text") %>%
@@ -659,7 +653,7 @@ jurdata2 <- reactive({jurdata})
   output$reportuse <- downloadHandler(
     filename = function() {
       paste('drug_use_report', sep = '.', switch(
-        input$formatuse, PDF = 'pdf', HTML = 'html', Word = 'docx'
+        input$formatuse, HTML = 'html' #, PDF = 'pdf', Word = 'docx'
       ))
     },
     
@@ -681,7 +675,7 @@ jurdata2 <- reactive({jurdata})
       library(rmarkdown)
       out <- render('drug_use_report.Rmd', switch(
         input$formatuse,
-        HTML = html_document(), PDF = pdf_document(), Word = word_document()),
+        HTML = html_document()), #, PDF = pdf_document(), Word = word_document()),
         params = params,
         envir = new.env(parent = globalenv()))
       file.rename(out, file)
@@ -693,7 +687,7 @@ jurdata2 <- reactive({jurdata})
   output$reportharms <- downloadHandler(
     filename = function() {
       paste('drug_harms_report', sep = '.', switch(
-        input$formatharms, PDF = 'pdf', HTML = 'html', Word = 'docx'
+        input$formatharms, HTML = 'html'#, Word = 'docx', PDF = 'pdf' 
       ))
     },
     
@@ -714,7 +708,7 @@ jurdata2 <- reactive({jurdata})
       library(rmarkdown)
       out <- render('drug_harms_report.Rmd', switch(
         input$formatharms,
-        HTML = html_document(), PDF = pdf_document(), Word = word_document()),
+        HTML = html_document()), #, PDF = pdf_document(), Word = word_document()),
         params = params,
         envir = new.env(parent = globalenv()))
       file.rename(out, file)

@@ -5,14 +5,6 @@ date: "2022-11-02"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-library(ggplot2)
-library(plotly)
-Weekly2 <- readRDS("~/Documents/MSc HDS/Dissertation/Experimental_shiny_design/Weekly2.rds")
-# A crypto market visualization that was abandoned as it was not exclusively Australian Data
-meth_plot <- ggplot(Weekly2[(Weekly2$Week> "2020-10-08" & Weekly2$Week < "2022-05-31"),] %>% filter(DrugAZ == "Meth/amphetamine (illicit)" & listing > 250), aes(x= Week, y = listing, color = MarketAZ)) + geom_line()
-```
-
 ```{r}
 ggplotly(meth_plot)
 ```
@@ -41,7 +33,7 @@ write.dta(TreatmentGrandViz, "~/Documents/MSc HDS/Dissertation/Experimental_shin
 # Deaths data modification
 load("~/Documents/MSc HDS/Dissertation/Experimental_shiny_design/death_2020.Rdata")
 COD2020_DT$jurisdiction[COD2020_DT$jurisdiction == "Tasmania"] <- "Tasmania*"
-
+COD2020_DT$Sex[COD2020_DT$Sex == "People"] <- "Total"
 COD2020_DT$cr[COD2020_DT$cr == 0] <- NA
     
 COD2020_DT$Drug <- ifelse(COD2020_DT$Drug == "AMPHETAMINES", "Amphetamine-type stimulants",
@@ -49,36 +41,35 @@ COD2020_DT$Drug <- ifelse(COD2020_DT$Drug == "AMPHETAMINES", "Amphetamine-type s
                                      ifelse(COD2020_DT$Drug == "CANNABINOIDS", "Cannabinoids",
                                             ifelse(COD2020_DT$Drug == "heroin", "Heroin", COD2020_DT$Drug))))
 COD2020_All$Drug <- "All drugs"
+COD2020_All$Sex[COD2020_All$Sex == "People"] <- "Total"
 COD2020_All$jurisdiction[COD2020_All$jurisdiction == "Tasmania"] <- "Tasmania*"
-save(COD2020_DT, file = "~/Documents/MSc HDS/Dissertation/Experimental_shiny_design/death_2020.Rdata")
-save(COD2020_All, file = "~/Documents/MSc HDS/Dissertation/Experimental_shiny_design/death_2020.Rdata")
-```
-```{r}
-drugtypes.data <- readRDS("~/Documents/MSc HDS/Dissertation/Experimental_shiny_design/drugtypes.data.rds")
-
-drugtypes.data <- drugtypes.data[c(1,2,11,13,14,18,19),]
-saveRDS(drugtypes.data, "~/Documents/MSc HDS/Dissertation/Experimental_shiny_design/drugtypes.data.rds")
-drugtypes.data <- readRDS("~/Documents/MSc HDS/Dissertation/Experimental_shiny_design/drugtypes.data.rds")
-
+save(COD2020_DT, COD2020_All, file = "~/Documents/MSc HDS/Dissertation/Experimental_shiny_design/death_2020.Rdata")
 ```
 
+
 ```{r}
+# This code was used to create the IDRS dataset used in the app
+# The same methods were used for the EDRS
+# Some steps may have been completed in the console
 IDRS_use <- readRDS("~/Documents/MSc HDS/Dissertation/Experimental_shiny_design/IDRS_use.rds")
 IDRS_use <- subset(IDRS_use, var_year != 2000 & var_year != 2001)
-IDRS_use <- IDRS_use[c(1:18)]
+#IDRS_use <- IDRS_use[c(1:18)]
+# Replacing all of the weekly denominator columns
 IDRS_use[c('methweekly_N', 'cocaineweekly_N', 'cannabisweekly_N', 'heroinweekly_N')] <- IDRS_use[c('anymethu_N', 'anycocaine_N', 'anycannabis_N', 'anyheroin_N')]
 IDRS_use$istate[IDRS_use$istate == "Aus"] <- "Australia"
 IDRS <- IDRS_use %>% pivot_longer(-c(var_year, istate),
                names_to = c("Drug", ".value"), 
                names_sep="_" )
+# Calculating confidence intervals
 confi <- epi.conf(cbind(IDRS$n, IDRS$N), ctype = "prevalence", method = "exact", conf.level = 0.95)
 ```
 ```{r}
 IDRS <- cbind(IDRS, confi)
+# Creating a column which displays whether the row contains any or weekly data
 IDRS$DrugType <- ifelse(grepl("^any", IDRS$Drug), "any", 
                       ifelse(grepl("weekly$", IDRS$Drug), "weekly", NA))
 
-# Create separate columns for each drug type
+# Create datasets for any and weekly data by themselves
 IDRS_any <- subset(IDRS, DrugType == "any")[,c("var_year", "istate", "Drug", "est", "lower", "upper")]
 colnames(IDRS_any)[4:6] <- paste(colnames(IDRS_any)[4:6], "any", sep="_")
 
@@ -114,7 +105,6 @@ saveRDS(IDRS_use, "~/Documents/MSc HDS/Dissertation/Experimental_shiny_design/ID
 
 ```{r}
 EDRS_use <- readRDS("~/Documents/MSc HDS/Dissertation/Experimental_shiny_design/EDRS_use.rds")
-
 
 ```
 
@@ -175,6 +165,8 @@ EDRS_weekly$upper_weekly <- round(EDRS_weekly$upper_weekly, digits = 2)*100
 ```
 
 ```{r}
+# This is necessary as there is no data for weekly heroin use
+# This prevents an error message
 new_rows <- data.frame(var_year = rep(2003, 9),
                         istate = c("Australia", "NSW", "VIC", "TAS", "QLD", "WA", "NT", "ACT", "SA"),
                         Drug = rep("Heroin", 9),
@@ -183,15 +175,10 @@ new_rows <- data.frame(var_year = rep(2003, 9),
                         upper = rep(NA_real_, 9),
                         DrugType = rep("weekly", 9))
 
-# add the new rows to your original data frame using rbind()
+# adding the new rows to the original data frame using rbind()
 EDRS <- rbind(EDRS, new_rows)
 
 ```
-
-
-
-
-
 
 ```{r}
 IDRS <- IDRS %>% pivot_longer(-c(var_year, istate),
@@ -213,4 +200,7 @@ saveRDS(EDRS, "~/Documents/MSc HDS/Dissertation/Experimental_shiny_design/EDRS.r
 library(epiR)
 confi <- epi.conf(cbind(IDRS_use$anymethu_n, IDRS_use$anymethu_N), ctype = "prevalence", method = "exact", conf.level = 0.95)
 confi2 <- epi.conf(cbind(IDRS$any, IDRS$denominator), ctype = "prevalence", method = "exact", conf.level = 0.85)
+```
+```{r}
+
 ```

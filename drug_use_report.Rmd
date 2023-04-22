@@ -24,11 +24,13 @@ library(ggplot2)
 library(tidyverse)
 library(readxl)
 library(dplyr)
+library(tinytex)
+library(officer)
 ```
 
 ## Weekly Use
 
-This plot presents the percentage of IDRS and EDRS participants from `r paste0(ifelse(params$city %in% c("ACT","NT"),'the ',''),params$city)` who reported at least weekly use in the last 6 months related to `r params$udrug`. In `r params$yr00[2]` `r paste0(tail(params$IDRSw$est, n=1),"%")` of IDRS respondents reported weekly or more frequent use, compared to `r paste0(tail(params$EDRSw$est, n=1),"%")` in the EDRS.
+This plot presents the percentage of IDRS and EDRS participants from `r paste0(ifelse(params$city %in% c("ACT","NT"),'the ',''),params$city)` who reported at least weekly use in the last 6 months related to `r params$udrug`. In `r params$yr00[2]` `r ifelse(!is.na(tail(params$IDRSw$est, n=1)),paste0(tail(params$IDRSw$est, n=1),"% of IDRS respondents reported weekly or more frequent use,"), "the IDRS was unavailable,")` `r ifelse(!is.na(tail(params$EDRSw$est, n=1)),paste0("compared to ", tail(params$EDRSw$est, n=1),"% in the EDRS"),"while the EDRS was unavailable.")`
 
 ```{r, echo = FALSE, warning=FALSE}
 COLOURS <- c("IDRS" = "blue", "EDRS" = "orange")
